@@ -555,6 +555,33 @@ Window Manager -> размещает Island как обычное окно в п
 
 **Где:** Level 2 (приложение) + Level 3 (Display Server, WebGPU).
 
+#### 3.3.1 Remote Renderer
+
+**Что:** Бэк рендерит UI и стримит bitmap на Фронт. Для слабых устройств, которым нужно запустить тяжёлое приложение (видеоредактор, 3D). Как GeForce Now / Citrix.
+
+**Архитектура:**
+
+```
+Бэк (V8 Isolate + WebGPU)
+  |
+  +-- Рендеринг в offscreen texture
+  +-- Кодирование в video stream (H.264/AV1)
+  +-- TLS-шифрованный bitmap-стрим -> Фронт
+  |
+  v
+Фронт (Display Server)
+  +-- Декодирование
+  +-- Отображение как обычное окно
+  +-- Ввод (мышь/клавиатура) -> обратно на Бэк
+```
+
+**Security:**
+- Bitmap-стрим шифруется TLS (внутри WireGuard-туннеля)
+- Бэк защищён от screen scraping на стороне сервера (watermark / blur для confidential Space)
+- Фронт не имеет доступа к логике приложения — только к пикселям
+
+**Где:** Level 2 (Бэк, V8 Isolate + WebGPU) + Level 3 (Display Server, decoder).
+
 ### 3.4 Тайловый и плавающий layout
 
 **Что:** Два режима размещения окон внутри проекта.
@@ -737,6 +764,8 @@ const context = {
 
 **Где:** Level 1 (Micro-Kernel, Capability Security).
 
+> Подробно: seccomp-профили, namespace-конфиги, V8 Sandbox parameters, firewall-правила localhost — в [Layer Security, §22](layer-7-security.md).
+
 ### 4.5 Permissions UI
 
 **Что:** Интерфейс для просмотра и управления разрешениями приложений. Пользователь видит, какие capabilities выданы каждому приложению, и может их отозвать.
@@ -763,6 +792,62 @@ Permissions UI (Level 3, Display Server):
 ```
 
 **Где:** Level 1 (Capability Security, SQLite) + Level 3 (Display Server, модальные окна) + Level 4 (Intent API, голосовое управление правами).
+
+### 4.12 Security Hooks (App Lifecycle)
+
+**Hook points:**
+
+```rust
+enum SecurityHook {
+    BeforeIsolateCreate { app_id, level, manifest },
+    AfterIsolateCreate { isolate_id, pid },
+    BeforeApiCall { isolate_id, api, args },
+    AfterApiCall { isolate_id, api, result },
+    BeforeNetworkRequest { isolate_id, domain, port },
+    OnIsolateFreeze { isolate_id },
+    OnIsolateThaw { isolate_id },
+    OnIsolateDestroy { isolate_id },
+    OnProfileSwitch { from_profile, to_profile },
+}
+```
+
+**Default handler:**
+- Проверка domain whitelist перед сетевым запросом (`BeforeNetworkRequest`)
+- Secure wipe профиля при переключении (`OnProfileSwitch`)
+- Проверка capabilities перед API-вызовом (`BeforeApiCall`)
+
+**Где:** Level 1 (Micro-Kernel, Security Hook subsystem). Интерфейс — Rust trait `SecurityHookHandler`.
+
+> Подробно: seccomp-профили, namespace-конфиги, V8 Sandbox parameters — в [Layer Security, §22](layer-7-security.md).
+
+### 4.13 Session Management
+
+**TTL и auto-lock:**
+
+```rust
+struct SessionConfig {
+    ttl_minutes: u32,           // 30 по умолчанию
+    auto_lock_after_idle: u32,  // 5 минут простоя
+    require_biometry: bool,     // true для уровня «Повышенный»
+}
+```
+
+- Проверка каждую минуту: idle > auto_lock → lock screen; total > ttl → logout
+- Owner может принудительно завершить сессию устройства через Core.Hardcore или другой Фронт
+
+**Remote wipe:**
+- Owner инициирует remote wipe → Бэк отзывает session token → push-уведомление Фронту → lock screen + очистка кэша
+- Шифрование кэша Фронта ключом device key + screen lock
+
+**Где:** Level 1 (Micro-Kernel, Session Manager) + Level 0 (Host Shim, screen lock / idle detection).
+
+### 4.14 Accessibility и защита от screen readers
+
+- **Accessibility API доступен только для системных приложений.** Сторонние приложения (уровни 1–5) изолированы — screen reader не может читать их окна
+- **Изоляция per Space:** screen reader, запущенный в Space A, не видит окна Space B
+- **Secure fields:** поля ввода паролей и recovery-фраз блокируют accessibility API даже для системных приложений
+
+**Где:** Level 3 (Display Server, accessibility API gating) + Level 0 (Host Shim, platform accessibility bridge).
 
 ---
 
@@ -1091,6 +1176,41 @@ Intent API (Level 4):
 
 **Где:** Level 1 (Chat Engine, Email Engine) + Level 2 (P2P) + Level 4 (Intent API).
 
+### 6.5 Техподдержка (Remote Support)
+
+**Архитектура:**
+
+```
+Пользователь: "техподдержка" (голос / Command Bar)
+  |
+  v
+Бэк открывает окно приёма (TTL 10 мин) + генерирует код: SUPPORT-9284-6173
+  |
+  v
+Пользователь диктует код специалисту
+  |
+  v
+Relay-сервер CORE Corp (NAT traversal) -> WireGuard-туннель до Бэка
+  |
+  v
+Бэк проверяет: код валиден? подпись CORE Corp (Ed25519, HSM) верна?
+  |
+  v
+На экране пользователя: "Подтверждённый специалист. Разрешить?"
+  |
+  v
+Сессия открыта (TTL 30 мин). Все действия логируются в аудит (категория «system»)
+```
+
+**Security controls:**
+- **Dual approval** для уровня доступа Full (требуется второе подтверждение)
+- **Видеозапись** сессий уровня Full — обязательна
+- **HSM key ceremony:** подпись запросов техподдержки через HSM CORE Corp (ключ никогда не покидает железо)
+- **Anomaly detection:** если техподдержка обращается к одному Бэку > N раз — alert Owner
+- **Rate limiting:** максимум 3 попытки подключения с одного IP, потом блокировка 30 мин
+
+**Где:** Level 0 (Host Shim, SSH-сервер) + Level 1 (Key Manager, Auth Proxy) + Level 2 (Relay-сервер).
+
 ---
 
 ## 7. Voice Engine
@@ -1156,6 +1276,17 @@ Wake word detection (опционально):
 ```
 
 **Где:** Level 4 (Intent API) + Level 0 (Audio, Host Shim).
+
+### 7.4 Безопасность голосового ввода
+
+- **Аппаратный индикатор записи (LED):** Host Shim активирует LED устройства при захвате микрофона. Пользователь видит, что CORE слушает.
+- **Аудио-буфер обнуляется** после распознавания — сырые audio samples не сохраняются на диск и не передаются
+- **Integrity check Whisper model:** при загрузке модели проверяется BLAKE3-хеш. Подмена модели → отказ загрузки
+- **Opt-out:** пользователь может полностью отключить микрофон в настройках (Settings → Privacy → Voice Input)
+- **Speaker identity (опционально):** локальная проверка голоса для sensitive-команд (требует PIN/биометрии)
+
+**Где:** Level 0 (Host Shim, LED + audio buffer) + Level 4 (Whisper integrity check).
+
 ---
 
 ## Intent API (Level 4)
@@ -1807,6 +1938,31 @@ Energy Manager (Level 1 + Level 0):
 ### 10.10 Behavioural Analysis
 - ML-модель для выявления аномалий в API-вызовах и сетевом трафике приложений
 - Пример: массовое чтение SQLite + сетевые запросы = высокий риск
+
+### 10.11 Supply Chain Protection
+
+- **Pinning зависимостей:** Cargo.lock и bun.lockb коммитятся в репозиторий. Exact versions в package.json, без `^` или `~`
+- **Reproducible builds:** Docker-контейнер с фиксированным toolchain. Два разных разработчика → одинаковый build.hash
+- **CI security gates:**
+  - `seccomp_validate` — сверка seccomp-профилей
+  - `namespace_test` — проверка изоляции namespace
+  - `v8_sandbox_test` — тесты на escape из V8 Sandbox
+  - `threat_model_check` — автоматическая проверка изменений threat model
+
+**Где:** CI/CD pipeline (вне runtime CORE OS).
+
+### 10.12 Incident Response
+
+**Runbook при security-инциденте:**
+
+1. **Изоляция узла** — отключение компрометированного устройства от mesh, отзыв session token
+2. **Отзыв ключей** — Owner инициирует rotation device keys через Key Manager
+3. **Аудит** — полный разбор аудит-логов (13 категорий), выявление затронутых данных
+4. **Уведомление** — push-уведомление всем Owner'ам затронутых Space
+5. **Восстановление** — восстановление из backup, проверка целостности CRDT-истории
+6. **SIEM integration** — опциональная отправка критичных событий во внешнюю SIEM-систему
+
+**Где:** Level 1 (Audit Engine, Key Manager, Backup Engine) + Level 2 (Sync Engine для mesh isolation).
 
 Подробно: аутентификация, шифрование, алгоритмы, RBAC, аудит, User Directory, изоляция, векторы атак — в [Layer Security](layer-7-security.md).
 

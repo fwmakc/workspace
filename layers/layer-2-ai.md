@@ -440,6 +440,9 @@ core-cli ai model register \
 | Облачные модели | Explicit consent + audit log. Prompt filtering удаляет чувствительные данные перед отправкой. |
 | Semantic Index | Embeddings и индекс хранятся в app-scoped SQLite, зашифрованы profile key. |
 | Voice History | Аудиозаписи голосовых команд не сохраняются (только распознанный текст, опционально). |
+| Whisper Integrity | BLAKE3-хеш модели проверяется при загрузке. Подмена → отказ загрузки. |
+| LED Indicator | Аппаратный LED активируется при захвате микрофона. Пользователь видит, что система слушает. |
+| Audio Buffer Wipe | Сырые audio samples обнуляются после распознавания, не сохраняются на диск. |
 
 ### Защита от prompt injection
 
