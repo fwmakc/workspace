@@ -180,6 +180,36 @@ Storage Manager → VFS (passport + body)
 
 ---
 
+## Host Shim (Level 0)
+
+**Что:** Единственный слой контакта с хост-ОС. Rust + winit + wgpu + CPAL + HID.
+
+**Компоненты:**
+
+```
+Host Shim (Rust):
+  |
+  +-- Window Manager (winit): окно, resize, DPI, multi-monitor
+  +-- WebGPU Backend (wgpu-native): Vulkan / Metal / DX12 / OpenGL ES fallback
+  +-- Audio (CPAL): микрофон, динамики, аудиопотоки
+  +-- Input (HID): клавиатура, мышь, тачпад, геймпад
+  +-- VFS Bridge: чтение/запись файлов хост-ОС, inotify/FSEvents/ReadDirectoryChanges
+  +-- Network Bridge: raw sockets для WireGuard
+  +-- Memory Bridge: SharedArrayBuffer между Rust и Bun
+```
+
+**Software Renderer / CPU Fallback:**
+- Если GPU не поддерживает WebGPU → Host Shim переключается на программный рендеринг (CPU) или OpenGL ES fallback
+- Производительность падает до 15–30 FPS, эффекты (blur, shadows) отключаются
+
+**Storage Watcher:**
+- Подписка на события хост-ОС: udev (Linux), WM_DEVICECHANGE (Windows), DiskArbitration (macOS)
+- Уведомляет Storage Manager о подключении/отключении носителей
+
+**Где:** Level 0 (Rust, системные вызовы).
+
+---
+
 ## 1. Command Bar (Строка)
 
 ### 1.1 Input Router
@@ -736,6 +766,150 @@ Permissions UI (Level 3, Display Server):
 
 ---
 
+## Display Server (Level 3)
+
+**Что:** Композитинг и рендеринг всего UI через WebGPU. Никакого DOM, никакого Chromium для системного UI.
+
+**Компоненты:**
+
+```
+WebGPU Pipeline (Level 3):
+  |
+  +-- Surface: swapchain для каждого монитора
+  +-- Render Pass: фон Space → окна приложений → эффекты → курсор
+  +-- Effects: blur, transparency, shadows, rounded corners (шейдеры)
+  +-- Text Rendering: glyph rasterization через font atlas
+  |
+  v
+  Command Encoder -> Queue -> GPU -> Экран
+```
+
+**Композитинг окон:**
+- Каждое окно = текстура (или direct rendering для WebGPU-приложений)
+- Z-сортировка Window Manager → порядок отрисовки
+- Dirty rectangles: перерисовываем только изменённые области
+
+**Shadow State Recovery:**
+- Если Shell падает → Display Server продолжает рендерить последний кадр (статичный)
+- После перезапуска Shell восстанавливает layout из SQLite + CRDT
+- Пользователь видит «фриз» на 100–300мс, а не чёрный экран
+
+**Theme Engine / Design System:**
+- `@core/ui` — библиотека компонентов, адаптирующаяся под текущую тему
+- Тема = набор цветов, шрифтов, форм, анимаций
+- Компоненты перерисовываются автоматически при смене темы
+- Адаптация под форм-фактор: десктоп (мышь) vs мобильный (тач)
+
+**Где:** Level 3 (WebGPU Pipeline) + Level 0 (Host Shim для system calls).
+
+---
+
+## 4.6 Scheduler
+
+**Что:** Планировщик задач, напоминаний и фоновых операций.
+
+**Как:**
+
+```
+Scheduler (Level 1):
+  |
+  +-- Таймеры: напоминания, будильники, cron-подобные задачи
+  +-- Фоновые задачи: индексация Search Engine, prefetch файлов, проверка обновлений
+  +-- Приоритеты: user-visible (напоминания) > background (индексация)
+  +-- Энергосбережение: при <20% батареи — background задачи только по Wi-Fi
+```
+
+**Где:** Level 1 (Micro-Kernel, SQLite).
+
+---
+
+## 4.7 Update Engine
+
+**Что:** Проверка, скачивание и установка обновлений приложений.
+
+**Как:**
+
+```
+Update Engine (Level 1):
+  |
+  +-- Проверка обновлений: по расписанию (Scheduler) или вручную
+  +-- Формат пакета: tar.zst, подпись Ed25519, хеш BLAKE3
+  +-- Проверка: подпись + хеш + min_core_version
+  +-- Установка: atomic replace, rollback при ошибке
+  +-- App Registry обновляет каталог
+```
+
+**Где:** Level 1 (App Registry + Scheduler).
+
+---
+
+## 4.8 Error Reporting Engine
+
+**Что:** Сбор и отправка отчётов об ошибках.
+
+**Как:**
+
+```
+Error Reporting Engine (Level 1):
+  |
+  +-- Белый список полей: error.code, error.message (опционально), stack trace
+  +-- Rate limiting: max 3 отчёта в час
+  +-- Preview: пользователь видит, что отправляется, перед отправкой
+  +-- HTTPS only, mandatory TLS pinning
+  +-- Контроль отправки error.message: пользователь может отказаться
+```
+
+**Где:** Level 1 (Micro-Kernel) + Level 2 (P2P / HTTPS).
+
+---
+
+## 4.9 core-dev (Developer CLI)
+
+**Что:** CLI-инструмент разработчика приложений для CORE OS.
+
+**Команды:**
+- `core-dev install` — установка зависимостей `@core/*`
+- `core-dev run` — запуск приложения в dev-режиме (hot reload)
+- `core-dev build` — сборка в V8 Bytecode (`bun build --bytecode`)
+- `core-dev validate` — проверка манифеста `core.json`
+- `core-dev publish` — публикация в App Registry (pkg.core.app)
+- `core-dev check-updates` / `core-dev update` / `core-dev rollback`
+
+**Где:** Опциональный компонент Level 1 (Micro-Kernel).
+
+---
+
+## 4.10 @core/mock
+
+**Что:** npm-пакет для тестирования приложений уровней 4–5 вне CORE OS.
+
+**Как:**
+- In-memory реализации `@core/*` API (`@core/db`, `@core/fs`, `@core/network` и др.)
+- Позволяет разрабатывать и тестировать приложение в обычном браузере/Node.js
+- Не требует запуска CORE OS
+
+**Где:** Dev-dependency, вне Level-архитектуры.
+
+---
+
+## 4.11 Window Injection & Env Injection
+
+**Window Injection (`window.__CORE_OS__`):**
+- Передача конфигурации в Island Mode (Chromium sandbox) до загрузки страницы
+- Данные: версия CORE, доступные API, тема, локаль
+- Приложение определяет среду выполнения и адаптируется
+
+**Env Injection (`process.env.CORE_OS*`):**
+- Передача переменных окружения в V8 Isolate
+- `CORE_OS_DB_PATH` — путь к app-scoped SQLite
+- `CORE_OS_VFS_PATH` — путь к app-scoped VFS
+- `CORE_OS_PROFILE_ID` — ID текущего профиля
+- `CORE_OS_SPACE_ID` — ID текущего Space
+
+**Где:** Level 2 (App Runtime) + Level 3 (Island Mode для Window Injection).
+
+---
+
 ## 5. Search & Tag Engine
 
 ### 5.1 Полнотекстовый поиск (Deep Indexing)
@@ -952,32 +1126,17 @@ Wake word detection (опционально):
 - Распознаёт команды даже при громком звуке игры
 - Результаты -> только в наушники (TTS) или overlay
 
-**Где:** Level 0 (аудио через Host Shim) + Level 4 (Whisper model, Intent Parser).
+**Где:** Level 0 (аудио через Host Shim) + Level 4 (Whisper model).
 
-### 7.2 Intent Parser
+### 7.2 TTS Engine
 
-**Что:** Текст/голос -> типизированная команда.
+**Что:** Локальный синтез речи. Результаты голосовых команд озвучиваются в наушники.
 
 **Как:**
-
-```
-"Запиши: купить краску для ванной"
-  |
-  v
-Intent Parser (Level 4):
-  +-- Первое слово "запиши" -> Intent: create_note
-  +-- Параметры: content = "купить краску для ванной"
-  +-- Контекст: текущий проект = "Ремонт"
-  |
-  v
-Intent Map -> находит Core.Notes.create_note()
-  |
-  v
-Вызов: Core.Notes.create_note({ content, project: "Ремонт" })
-  |
-  v
-Заметка создана. TTS: "Записал в проект Ремонт"
-```
+- Модель: Piper / Coqui
+- Задержка: <100 мс
+- Опциональный облачный fallback
+- Работает в Zero UI (игры, без экрана) и в обычном режиме
 
 ### 7.3 Zero UI
 
@@ -997,6 +1156,130 @@ Intent Map -> находит Core.Notes.create_note()
 ```
 
 **Где:** Level 4 (Intent API) + Level 0 (Audio, Host Shim).
+---
+
+## Intent API (Level 4)
+
+**Что:** Программный интерфейс для регистрации и вызова Intents. Позволяет приложениям и системе понимать намерения пользователя.
+
+### 7.5 Intent Parser
+
+**Что:** Текст (из Command Bar или Whisper) → типизированная команда (Intent).
+
+**Как:**
+
+```
+"Запиши: купить краску для ванной"
+  |
+  v
+Intent Parser (Level 4):
+  +-- Base Tier (всегда работает): rule-based + lightweight NLP
+      +-- Словари Intents: "открой", "найди", "переключи", "создай"
+      +-- FTS5 поиск по SQLite (имена файлов, теги, контакты)
+      +-- 16 MB RAM, не требует GPU
+  +-- Full Tier (Core.Mind включён): Semantic Kernel + векторный поиск
+      +-- Embeddings (nomic-embed-text/bge-m3) → векторный индекс
+      +-- Context Enricher: обогащает запрос данными из индекса
+  |
+  v
+Intent Map -> находит зарегистрированный Intent
+```
+
+### 7.6 Intent Resolver
+
+**Что:** Сопоставляет распознанный Intent с приложением или системной командой.
+
+**Как:**
+- Сопоставление с зарегистрированными Intents приложений (`os.mind.registerIntent`)
+- Системные Intents: яркость, громкость, переключение профиля, скриншот
+- Неоднозначность: если 2 приложения с Intent `open_terminal` → выбор по приоритету (последнее использование, владелец проекта) или уточнение в Command Bar
+
+### 7.7 Action Executor
+
+**Что:** Выполняет Intent: вызывает приложение, системную команду, генерирует UI или обращается к Cloud Bridge.
+
+**Как:**
+- **Intent API вызов:** `Core.Notes.create_note({ content, project })`
+- **Системный вызов:** изменение настроек, управление окнами
+- **Generative UI:** если готового приложения нет → генерация JS-виджета в Level 5 sandbox
+- **Cloud Bridge:** прокси-мост к облачным LLM (OpenAI, Anthropic, GLM, Kimi, Gemini) через OpenAI-compatible API
+
+### 7.8 Response Formatter
+
+**Что:** Формирует ответ пользователю.
+
+**Как:**
+- Текст в Command Bar
+- TTS (Piper/Coqui) — локальный синтез речи
+- UI-виджет (временный, через `@core/graphics`)
+- Безмолвное действие (выполнено, ничего не показано)
+
+### 7.9 TTS Engine
+
+**Что:** Локальный синтез речи.
+
+**Как:**
+- Модель: Piper / Coqui
+- Задержка: <100 мс
+- Опциональный облачный fallback
+
+### 7.10 Generative UI Engine
+
+**Что:** Генерация JS-кода визуализации на лету.
+
+**Как:**
+- ИИ собирает данные из Semantic Kernel
+- Пишет JS-код в Level 5 sandbox
+- Отрисовывает временный виджет через `@core/graphics`
+- Пример: «Покажи график трат на кофе за год» → сгенерированный виджет
+
+### 7.11 Cloud Bridge
+
+**Что:** Прокси-мост к облачным LLM-провайдерам.
+
+**Как:**
+- OpenAI-compatible API (OpenAI, Anthropic, GLM, Kimi, Gemini)
+- Explicit consent per request (по умолчанию)
+- Prompt filtering: DLP, удаление чувствительных данных перед отправкой
+- Аудит всех облачных запросов
+
+### 7.12 Smart Scheduler
+
+**Что:** Динамическое распределение AI-нагрузки между GPU/NPU/CPU.
+
+**Как:**
+- Мониторинг загрузки системы
+- Если запущена игра → снижение приоритета Whisper/SLM
+- Переключение между CPU и NPU в зависимости от доступности
+
+### 7.13 AI Event Bus
+
+**Что:** Внутренняя шина событий AI-конвейера.
+
+**События:**
+- `ai.speech.recognized` — Whisper завершил распознавание
+- `ai.intent.resolved` — Intent Parser определил намерение
+- `ai.action.executed` — Action Executor выполнил команду
+- `ai.cloud.requested` — запрос ушёл в Cloud Bridge
+
+### 7.14 Pipeline Hooks
+
+**Точки расширения для разработчиков:**
+- `preIntentParse` — модификация текста перед парсингом
+- `postIntentResolve` — обработка после определения Intent
+- `preActionExecute` — проверка перед выполнением
+
+### 7.15 Model Sandbox
+
+**Что:** Изоляция AI-процессов.
+
+**Как:**
+- Whisper, SLM, TTS, Ollama — каждый в отдельном процессе или V8 Isolate
+- Нет прямого доступа к VFS, SQLite, сети (кроме Cloud Bridge через прокси)
+- Доступ только через `@core/*` wrappers
+
+**Где:** Level 4 (Intent API, AI Engine) + Level 2 (Ollama/llama.cpp) + Level 0 (Host Shim для GPU/NPU).
+
 ---
 
 ## 8. Profile Manager
@@ -1203,6 +1486,19 @@ Mesh Engine (Level 2):
 - Нагрузка на канал: 95% (бесконечные повторы) → 40% (FEC + избыточность)
 - Особенно критично для мобильных сетей и "микроволновок"
 
+**TCP Relay (NAT Traversal Fallback):**
+- Если UDP заблокирован (firewall, провайдер) → fallback на TCP relay
+- Потеря скорости: ~20% по сравнению с UDP
+- Relay-серверы CORE Corp (опционально) или корпоративные Supernodes
+- Автоматическое переключение UDP → TCP при обнаружении блокировки
+
+**Dark-Mesh / Протокол Омега:**
+- План "Б" при попытке блокировки P2P-трафика
+- Обфускация: трафик маскируется под обычный HTTPS-шум или видеозвонки (WebRTC-стеганография)
+- Активация: автоматически (при обнаружении блокировки) или вручную (Owner)
+- Неотличим от легитимного трафика для DPI (Deep Packet Inspection)
+- Небольшое снижение пропускной способности (~15%)
+
 ### 9.2 CRDT-синхронизация
 
 **Что:** Конфликт-free репликация всех данных между устройствами.
@@ -1402,6 +1698,49 @@ Fallback:
 
 ---
 
+## 9.7 Backup Engine
+
+**Что:** Резервное копирование данных Бэка на внешние носители.
+
+**Как:**
+
+```
+Backup Engine (Level 1):
+  |
+  +-- BackupTarget interface:
+      +-- UsbTarget: USB-накопитель
+      +-- CoreTarget: другой узел CORE через P2P
+      +-- S3Target: облачное хранилище
+      +-- SftpTarget: SFTP-сервер
+      +-- CustomTarget: плагин
+  +-- Шифрование: Backup Key (derived из recovery-фразы, BIP-39)
+  +-- Инкрементальные бэкапы: только изменённые CID
+  +-- Проверка целостности: Merkle root backup snapshot
+```
+
+**Где:** Level 1 (VFS + Key Manager) + Level 0 (Host Shim для записи на носители).
+
+---
+
+## 9.8 Energy Manager
+
+**Что:** Управление энергопотреблением и производительностью.
+
+**Как:**
+
+```
+Energy Manager (Level 1 + Level 0):
+  |
+  +-- Адаптивная синхронизация: при <20% батареи — P2P backoff, background sync только по Wi-Fi
+  +-- Display Server low-power mode: снижение FPS, отключение эффектов
+  +-- CPU governor: снижение частоты при перегреве / низком заряде
+  +-- NPU/GPU scheduling: переключение AI-нагрузки на CPU при недоступности акселераторов
+```
+
+**Где:** Level 1 (Scheduler + Sync Engine) + Level 0 (Host Shim для CPU/GPU governors).
+
+---
+
 ## 10. Security Layer
 
 Безопасность — кросс-слойная тема, подробно описана в [Layer Security](layer-7-security.md).
@@ -1417,6 +1756,57 @@ Fallback:
 | Audit Engine | Level 1 | 13 категорий, include/exclude, SQLite |
 | User Directory | Level 1 | Local/LDAP/OAuth/Custom провайдеры |
 | Capability Security | Level 1 | Контекст приложения с разрешениями (fs, network, graphics, mind, contacts) |
+
+### 10.1 CRDT Rate Limiting & Quarantine
+- Rate limiting: max N операций в секунду от одного устройства
+- CRDT garbage collection: операции старше M дней, уже merged — удаляются
+- CRDT checkpoint: периодический снапшот состояния для отката
+- CRDT quarantine: подозрительный поток от узла приостанавливается до подтверждения Owner
+
+### 10.2 Seeding Security Protocol
+- Аутентификация target через device key pinning
+- Только Owner или админ с правом `back:promote` может инициировать seeding
+- Snapshot подписан source device key (Ed25519)
+- Target проверяет подпись + Merkle root перед активацией
+- Rate limiting: один seeding в 24 часа на source
+
+### 10.3 Session Management
+- TTL сессии, auto-lock после простоя
+- Принудительный отзыв сессии Owner'ом
+- Уведомление push на Фронт при отзыве
+
+### 10.4 Secure Memory Wipe
+- Zeroize V8 heap regions при freeze/thaw профиля
+- Обнуление SharedArrayBuffer regions при переключении профиля
+- Очистка clipboard при переключении
+
+### 10.5 Encrypted Memory (уровень «Максимальный»)
+- Шифрование страниц AES-256-GCM-SIV
+- Page fault handler: расшифровка только при доступе
+
+### 10.6 Boot Integrity (Core Base / Raspberry Pi)
+- LUKS encrypted rootfs по умолчанию
+- Signed kernel + initrd
+- QR-based passphrase через BLE/LAN с телефона
+- Integrity Monitoring Agent (BLAKE3)
+
+### 10.7 Recovery & Shamir's Secret Sharing
+- Recovery-фраза (BIP-39, 24 слова) → backup key + profile key
+- Shamir's Secret Sharing: 3 части, нужно 2 из 3
+- Social recovery через доверенные контакты
+
+### 10.8 Incognito Mode
+- Отдельный V8 Isolate, no cache, no cookies
+- DNS через DoH
+- Auto-wipe при закрытии
+
+### 10.9 Remote Attestation
+- TPM-based proof-of-integrity по запросу Бэка
+- Опционально для корпоративных сценариев
+
+### 10.10 Behavioural Analysis
+- ML-модель для выявления аномалий в API-вызовах и сетевом трафике приложений
+- Пример: массовое чтение SQLite + сетевые запросы = высокий риск
 
 Подробно: аутентификация, шифрование, алгоритмы, RBAC, аудит, User Directory, изоляция, векторы атак — в [Layer Security](layer-7-security.md).
 
