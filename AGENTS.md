@@ -25,7 +25,8 @@ os/
 │   ├── layer-6-apps.md                     # Модель приложений: 5 уровней интеграции
 │   ├── layer-7-security.md                 # Безопасность: единый кросс-слойный документ
 │   ├── layer-8-technical-decomposition.md  # Подсистемы: техническая декомпозиция
-│   └── layer-9-business-model.md           # Бизнес-модель и go-to-market
+│   ├── layer-9-hardware-requirements.md    # Требования к железу
+│   └── layer-10-business-model.md          # Бизнес-модель и go-to-market
 └── src/                         # Исходный код (TODO)
 ```
 
