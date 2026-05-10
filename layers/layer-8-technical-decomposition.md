@@ -2,7 +2,7 @@
 
 Как каждый сценарий из Layer 1 и Layer 3 реализуется технически. Какие подсистемы участвуют, как данные текут между ними, на каком уровне архитектуры каждая живёт. Сценарии установки описаны в [Layer: Установка](layer-4-installation-scenarios.md). Взаимодействие с устройствами и носителями — в [Layer Devices](layer-5-devices.md).
 
-Ссылки: [architecture.md](../project/architecture.md), [tech-stack.md](../project/tech-stack.md), [ui-framework.md](../project/ui-framework.md), [filesystem.md](../project/filesystem.md), [ai-layer.md](../project/ai-layer.md).
+Ссылки: [architecture.md](../project/architecture.md), [tech-stack.md](../project/tech-stack.md), [filesystem.md](../project/filesystem.md), [ai-layer.md](../project/ai-layer.md).
 
 ---
 
@@ -1096,6 +1096,72 @@ Session Handoff:
 ```
 
 **Где:** Level 0 (VFS) + Level 2 (P2P, CRDT).
+
+### 9.5 Seeding и смена primary Бэка
+
+**Что:** Перенос всех данных с текущего primary Бэка (source) на новый узел (target) и переключение роли primary. Работает между любыми узлами: ноутбук → Core Base, ноутбук → сервер, сервер → VDS, VDS1 → VDS2.
+
+**Как:**
+
+```
+Обнаружение target:
+  |
+  +-- Target включается → mDNS/Bonjour анонс (локальная сеть)
+  +-- Или: ручное добавление по IP/адресу + код приглашения (удалённая сеть)
+  +-- Source (текущий primary) видит target в списке доступных Бэков
+  +-- Фронт показывает UI: «Сделать [Имя Бэка] основным?»
+  |
+  v
+Подготовка:
+  |
+  +-- Если target пустой (новый узел) → полный seeding (см. ниже)
+  +-- Если target уже имеет данные (бывший сбалансированный Бэк):
+  |   +-- Система предлагает: «Объединить данные» (CRDT merge) или «Перезаписать target"
+  |   +-- CRDT merge: оба журнала сливаются, конфликты разрешаются автоматически
+  |
+  v
+Seeding (инициирует source):
+  |
+  +-- ECDH handshake между source и target
+  +-- WireGuard tunnel устанавливается автоматически
+  +-- Source отправляет полный CRDT snapshot:
+  |   +-- VFS metadata (Merkle Search Tree)
+  |   +-- Profile Store (все профили, ключи, настройки)
+  |   +-- App-scoped SQLite (данные приложений)
+  |   +-- Audit logs
+  |   +-- Configuration (App Registry, RBAC, политики)
+  +-- Передача идёт по частям (chunked), с докачкой при обрыве
+  +-- Progress отображается на Фронте
+  |
+  v
+Переключение ролей:
+  |
+  +-- Target валидирует целостность snapshot (Merkle root)
+  +-- Target активирует Profile Store → становится primary
+  +-- Source меняет mode: primary → cached (или сбалансированный)
+  +-- Sync Engine на всех узлах обновляет primary_node в mesh-конфиге
+  +-- P2P Mesh перестраивает топологию: target = центральный узел
+  |
+  v
+Fallback:
+  +-- Если target недоступен > N часов: source предлагает вернуть primary
+  +-- Owner подтверждает → source восстанавливает mode = primary
+  +-- Данные не теряются: CRDT-ноды синхронизировались до отказа
+  +-- Обратная миграция: повторный seeding source → target при восстановлении
+```
+
+**Где:** Level 2 (P2P Mesh, CRDT snapshot) + Level 1 (Profile Store, VFS) + Level 0 (WireGuard, Host Shim).
+
+**Безопасность:**
+
+- **Аутентификация target:** Перед seeding'ом source проверяет device key target через mesh-реестр. При ручном добавлении — одноразовый код приглашения от Owner (TTL 10 мин).
+- **Авторизация:** Инициировать seeding может только Owner или админ с правом `back:promote`. RBAC Engine на source проверяет права перед запуском.
+- **Целостность snapshot:** Snapshot подписан source device key (Ed25519). Target проверяет подпись + Merkle root перед активацией Profile Store.
+- **Конфиденциальность:** Весь трафик через WireGuard (ChaCha20-Poly1305). ECDH handshake обеспечивает forward secrecy.
+- **Rate limiting:** Один seeding в 24 часа на source. Повторный seeding требует явного подтверждения Owner.
+- **Аудит:** Операция записывается в audit log: `action: back_seeding`, source device, target device, timestamp, profile_id, snapshot_size, result.
+- **Recovery:** Для уровней безопасности «Повышенный» и «Максимальный» — ввод recovery-фразы или биометрия на source перед началом переноса.
+- **Secure wipe:** Команда `core-cli back wipe --device <id>` — перезапись всех данных профиля на source случайными данными (AES-256-GCM encrypted zeros) при выводе из эксплуатации.
 
 ---
 

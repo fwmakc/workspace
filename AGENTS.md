@@ -25,6 +25,7 @@ os/
 │   ├── layer-6-apps.md                     # Модель приложений: 5 уровней интеграции
 │   ├── layer-7-security.md                 # Безопасность: единый кросс-слойный документ
 │   ├── layer-8-technical-decomposition.md  # Подсистемы: техническая декомпозиция
+│   ├── layer-9-business-model.md           # Бизнес-модель и go-to-market
 ├── project/                     # Проектная документация
 │   ├── vision.md                # Видение и философия
 │   ├── architecture.md          # 5-уровневая архитектура
@@ -32,13 +33,11 @@ os/
 │   ├── security.md              # Модель безопасности
 │   ├── multiuser.md             # Мультипользовательность
 │   ├── filesystem.md            # Виртуальная файловая система
-│   ├── ui-framework.md          # UI-фреймворк (3 уровня)
 │   ├── ai-layer.md              # ИИ-слой и Intent API
 │   ├── integration-modes.md     # Режимы интеграции с хост-ОС
 │   ├── p2p-sync.md              # P2P-сеть, CRDT, синхронизация
 │   ├── backoffice.md            # Бэк-офис и Суперюзер
 │   ├── stress-tests.md          # Результаты стресс-тестов
-│   └── business-model.md        # Бизнес-модель и go-to-market
 ├── mvp/                         # MVP планирование (3 месяца)
 │   ├── README.md                # MVP scope и timeline
 │   ├── track1-runtime.md        # Трек 1: Core Runtime
