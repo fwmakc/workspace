@@ -593,7 +593,7 @@ terminal 2: core-dev run com.todoapp --dev   ← CORE OS подключает :3
 
 ### Публикация — будущие версии
 
-`core-dev publish` — загрузка приложения в App Registry (pkg.core.app). Публикация, версионирование, подпись пакетов, модерация. Подробности будут описаны в `project/app-store.md`.
+`core-dev publish` — загрузка приложения в App Registry (pkg.core.app). Публикация, версионирование, подпись пакетов, модерация. Подробности будут описаны в отдельном документе App Registry.
 
 ---
 

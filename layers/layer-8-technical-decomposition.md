@@ -2,7 +2,7 @@
 
 Как каждый сценарий из Layer 1 и Layer 3 реализуется технически. Какие подсистемы участвуют, как данные текут между ними, на каком уровне архитектуры каждая живёт. Сценарии установки описаны в [Layer: Установка](layer-4-installation-scenarios.md). Взаимодействие с устройствами и носителями — в [Layer Devices](layer-5-devices.md).
 
-Ссылки: [architecture.md](../project/architecture.md), [tech-stack.md](../project/tech-stack.md), [filesystem.md](../project/filesystem.md), [ai-layer.md](../project/ai-layer.md).
+Ссылки: [Layer 3 — System Split](layer-3-system-split.md), [Layer 5 — Devices](layer-5-devices.md), [Layer 2 — AI](layer-2-ai.md), [Layer 7 — Security](layer-7-security.md).
 
 ---
 
@@ -48,11 +48,11 @@ Storage Mgr
 
 | Уровень | Что живёт | Ссылка |
 |---------|----------|--------|
-| Level 0: Host Shim (Rust) | Window, GPU, Input, Memory Bridge, VFS bridge | [architecture.md](../project/architecture.md) |
-| Level 1: Micro-Kernel (Bun) | IPC, Isolate Management, SQLite, Capability Security | [architecture.md](../project/architecture.md) |
-| Level 2: Mesh Engine | P2P, CRDT, Content Addressing, Anti-entropy | [architecture.md](../project/architecture.md) |
-| Level 3: Display Server | WebGPU Renderer, Layout Engine, Universal Shell, Effects | [architecture.md](../project/architecture.md) |
-| Level 4: Intent API | Semantic Kernel, Intent Map, Generative UI, Voice | [architecture.md](../project/architecture.md) |
+| Level 0: Host Shim (Rust) | Window, GPU, Input, Memory Bridge, VFS bridge | Host Shim |
+| Level 1: Micro-Kernel (Bun) | IPC, Isolate Management, SQLite, Capability Security | Micro-Kernel |
+| Level 2: Mesh Engine | P2P, CRDT, Content Addressing, Anti-entropy | Mesh Engine |
+| Level 3: Display Server | WebGPU Renderer, Layout Engine, Universal Shell, Effects | Display Server |
+| Level 4: Intent API | Semantic Kernel, Intent Map, Generative UI, Voice | Intent API |
 
 ---
 
@@ -478,7 +478,7 @@ Universal Shell (Level 3)
   +-- Примагничивание (snap): к краям, к другим окнам, к половинам экрана
 ```
 
-**Принцип:** Shell может падать, но окна продолжают рендериться. Shadow State Recovery (см. [architecture.md](../project/architecture.md)).
+**Принцип:** Shell может падать, но окна продолжают рендериться. Shadow State Recovery восстанавливает состояние из SQLite + CRDT при перезапуске.
 
 **Где:** Level 3 (Universal Shell) + Level 0 (input через Host Shim).
 
@@ -541,6 +541,62 @@ Window Manager -> размещает Island как обычное окно в п
 **Переключение:** настройка проекта или голосом.
 
 **Где:** Level 3 (Display Server, Layout Engine).
+
+### 3.5 Полноэкранный layout
+
+**Что:** Окно занимает 100% viewport монитора. Не путать с Exclusive-режимом — это layout внутри Managed Space, а не захват GPU/ввода у хост-ОС.
+
+**Как:**
+
+```
+Приложение вызывает requestFullscreen()
+  |
+  v
+Window Manager (Level 3)
+  |
+  +-- Сохраняет предыдущий layout (state_before_fullscreen)
+  +-- Убирает рамки и декорации окна
+  +-- Скрывает Command Bar (или сворачивает в indicator line)
+  +-- Устанавливает окну z_index = MAX, размер = viewport монитора
+  |
+  v
+Display Server (Level 3)
+  +-- Рендерит только это окно, без композитинга остальных
+  +-- Все input events -> это окно (кроме зарезервированных жестов)
+```
+
+**Выход из полноэкрана:**
+- `Esc` -> Window Manager восстанавливает state_before_fullscreen
+- Системный жест (свайп от края, угловой жест) -> Input Router (Level 2) -> Window Manager
+- Panic Gesture (тройное касание угла) -> Input Router перехватывает на уровне Host Shim, принудительный выход
+
+**Где:** Level 3 (Window Manager + Display Server) + Level 2 (Input Router, жесты).
+
+### 3.6 Optimistic Rendering
+
+**Что:** UI рисует локальные изменения мгновенно, не дожидаясь подтверждения от других устройств. Если прилетает "проигравший" winner по хэшу — экран **не откатывается назад**.
+
+**Как:**
+
+```
+Пользователь ввёл текст / переместил окно / изменил файл
+  |
+  v
+Display Server (Level 3)
+  |
+  +-- Применяет изменение локально и мгновенно (0ms feedback)
+  +-- Отправляет мутацию в CRDT Layer (Level 2) → Sync Engine → P2P Mesh
+  |
+  v
+Если прилетает remote winner (Hash-based Ordering выбрал другое значение):
+  +-- UI **не откатывает** состояние назад (это бесит)
+  +-- Показывает индикатор синхронизации: «Обновлено на другом устройстве»
+  +-- Плавно применяет winner через 300ms fade / blink
+  +-- Пользователь видит результат, а не конфликт
+```
+
+**Где:** Level 3 (Display Server) + Level 2 (CRDT Layer).
+
 ---
 
 ## 4. App Runtime
@@ -1141,6 +1197,12 @@ Mesh Engine (Level 2):
 
 **Где:** Level 2 (Mesh Engine) + Level 0 (WireGuard, Host Shim).
 
+**Erasure Coding (FEC):**
+- Избыточное кодирование в P2P-поток (как в спутниковой связи)
+- Приёмник восстанавливает данные при потере до 30% пакетов без ретрансмита
+- Нагрузка на канал: 95% (бесконечные повторы) → 40% (FEC + избыточность)
+- Особенно критично для мобильных сетей и "микроволновок"
+
 ### 9.2 CRDT-синхронизация
 
 **Что:** Конфликт-free репликация всех данных между устройствами.
@@ -1153,9 +1215,14 @@ Mesh Engine (Level 2):
   v
 CRDT Layer (Level 2):
   |
-  +-- Causal Trees: для текста и упорядоченных данных
-  +-- LWW-Element-Set: для простых UI-состояний (last write wins)
+  +-- Causal Trees: для текста и упорядоченных данных (merge без потерь)
+  +-- Operational Transformation (OT): для real-time collaborative editing
+      поверх Causal Trees. Совместное редактирование документов в реальном времени.
+  +-- LWW-Element-Set: для простых UI-состояний (last write wins по clock)
   +-- Hybrid Logical Clocks: для порядка событий
+  +-- Hash-based Ordering: финальный арбитр для true concurrent conflict
+      на регистре. Сравниваем BLAKE3 хэши значений, winner детерминирован.
+      Никаких веток, никакого ручного merge.
   |
   v
 Anti-entropy:
@@ -1167,9 +1234,28 @@ Anti-entropy:
   |
   v
 При потере связи:
-  +-- Локальный Fork -> данные сохраняются локально
-  +-- При восстановлении связи -> автоматический Merge
+  +-- Локальное накопление мутаций -> CRDT-журнал растёт локально
+  +-- При восстановлении связи -> автоматический детерминированный Merge
+      (CRDT math + Hash-based Ordering для edge cases)
 ```
+
+**Copy-on-Write для MST:**
+- MST не обновляется "на месте"
+- Новая версия дерева строится в свободных блоках
+- Пока Root Hash не записан атомарно → валидна старая версия
+- Питание упало → при перезагрузке CORE видит незавершённый Root Hash v.2 и мгновенно откатывается к v.1
+- Ни одного битого байта
+
+**Adaptive Sync Window (расширенное описание):**
+- Экспоненциальная задержка (Backoff) при высокой нагрузке на канал
+- Если канал забит → частота обмена хэшами падает до 1 раза в 5 секунд
+- Приоритет: User Interactivity Stream (Z-layer) первым, Cold Storage — по остаточному принципу
+
+**Bit-Diff (XOR-дельта) — расширенное описание:**
+- Вместо полных 256-битных хэшей → XOR-разница между текущим и предыдущим состоянием узла
+- Zstd-сжатие с кастомным словарём, заточенным под структуру Merkle-дерева
+- Служебный трафик падает в 12–15 раз
+- "Микроволновка" получает микро-пакет в 40 байт и восстанавливает изменения
 
 **Где:** Level 2 (Mesh Engine, CRDT).
 
@@ -1241,7 +1327,7 @@ Session Handoff:
   +-- Если target пустой (новый узел) → полный seeding (см. ниже)
   +-- Если target уже имеет данные (бывший сбалансированный Бэк):
   |   +-- Система предлагает: «Объединить данные» (CRDT merge) или «Перезаписать target"
-  |   +-- CRDT merge: оба журнала сливаются, конфликты разрешаются автоматически
+  |   +-- CRDT merge: оба журнала сливаются, конфликты разрешаются автоматически (CRDT math + Hash-based Ordering)
   |
   v
 Seeding (инициирует source):
@@ -1286,6 +1372,33 @@ Fallback:
 - **Аудит:** Операция записывается в audit log: `action: back_seeding`, source device, target device, timestamp, profile_id, snapshot_size, result.
 - **Recovery:** Для уровней безопасности «Повышенный» и «Максимальный» — ввод recovery-фразы или биометрия на source перед началом переноса.
 - **Secure wipe:** Команда `core-cli back wipe --device <id>` — перезапись всех данных профиля на source случайными данными (AES-256-GCM encrypted zeros) при выводе из эксплуатации.
+
+### 9.6 Lazy Boot / Headless Logic
+
+**Что:** На устройствах с <512MB RAM и слабым CPU CORE запускается не полностью, а как "умный терминал".
+
+**Как:**
+
+```
+Устройство с ограниченными ресурсами:
+  |
+  +-- Host Shim активирует режим Headless Logic
+  +-- Запускается только Level 3 (Display Server) + Input Handler
+  +-- Level 1 (Micro-Kernel) и Level 2 (Mesh Engine) — не запускаются локально
+  +-- Вся тяжёлая логика делегируется ближайшему мощному узлу (Core Base, Бэк-офис, ПК)
+      через Remote Isolate Call по P2P Mesh
+  |
+  v
+Результат: Планшет за $50 превращается в умный терминал
+  - Не греется
+  - CPU 15%
+  - На экране — живой, отзывчивый нативный интерфейс
+  - 90% JS-кода крутится на сервере в соседней комнате
+```
+
+**Fallback:** Если мощный узел недоступен → система показывает последний кэшированный layout (Shadow State) и плашку "Офлайн-режим".
+
+**Где:** Level 0 (Host Shim) + Level 3 (Display Server) + Level 2 (P2P Mesh для Remote Isolate Call).
 
 ---
 
@@ -1568,6 +1681,39 @@ Clipboard Manager (Level 1):
 ```
 
 **Где:** Level 1 (Clipboard Manager) + Level 2 (P2P, передача между Бэками) + Level 3 (UI, drag-and-drop).
+
+### 13.4 Бесшовный буфер обмена P2P
+
+**Что:** Копирование на одном устройстве → вставка на другом через 50мс.
+
+**Как:**
+
+```
+Пользователь нажал Ctrl+C на ноутбуке:
+  |
+  v
+Clipboard Manager (Level 1, ноутбук)
+  |
+  +-- Push в локальный стек
+  +-- Отправляет top-of-stack через P2P Mesh (WireGuard tunnel) на все связанные устройства
+  +-- Payload: content (encrypted), type, timestamp, TTL (default: 60 сек)
+  |
+  v
+Clipboard Manager (Level 1, телефон)
+  +-- Получает пакет → push в стек
+  +-- Показывает ненавязчивый индикатор: "Скопировано с ноутбука"
+  |
+  v
+Пользователь нажал Ctrl+V на телефоне → вставляет содержимое с ноутбука
+```
+
+**Ограничения:**
+- Только текст и URL (не файлы — файлы через VFS Sharing)
+- TTL 60 секунд (буфер не разрастается)
+- Шифрование: WireGuard (ChaCha20-Poly1305) + payload encrypted device key
+- Политика Бэка: `clipboard_allow_export` применяется и к P2P-sync (если "none" — P2P-буфер отключён)
+
+**Где:** Level 1 (Clipboard Manager) + Level 2 (P2P Mesh).
 
 ---
 

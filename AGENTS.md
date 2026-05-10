@@ -25,13 +25,7 @@ os/
 │   ├── layer-6-apps.md                     # Модель приложений: 5 уровней интеграции
 │   ├── layer-7-security.md                 # Безопасность: единый кросс-слойный документ
 │   ├── layer-8-technical-decomposition.md  # Подсистемы: техническая декомпозиция
-│   ├── layer-9-business-model.md           # Бизнес-модель и go-to-market
-├── project/                     # Устаревшая проектная документация (legacy)
-│   ├── architecture.md          # 5-уровневая архитектура
-│   ├── filesystem.md            # Виртуальная файловая система
-│   ├── integration-modes.md     # Режимы интеграции с хост-ОС
-│   ├── p2p-sync.md              # P2P-сеть, CRDT, синхронизация
-│   ├── stress-tests.md          # Результаты стресс-тестов
+│   └── layer-9-business-model.md           # Бизнес-модель и go-to-market
 └── src/                         # Исходный код (TODO)
 ```
 
@@ -45,7 +39,7 @@ os/
 
 1. Формат: Markdown, заголовки `##`, subsections `###`
 2. Каждый документ должен быть самодостаточным — читается без остальных
-3. Cross-reference: ссылаться на другие документы как `[См. architecture.md](architecture.md)`
+3. Cross-reference: ссылаться на другие документы как `[См. layer-3-system-split.md](layer-3-system-split.md)`
 
 ### Build Commands (TODO)
 
