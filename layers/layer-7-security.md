@@ -1676,6 +1676,41 @@ fn check_integrity() -> IntegrityReport {
 }
 ```
 
+### 22.5.4 Immutable Rootfs (OverlayFS + dm-verity)
+
+**Что:** Системные файлы CORE OS неизменяемы на уровне файловой системы. Обновления — атомарная смена lowerdir OverlayFS.
+
+**Как:**
+
+```
+Core Base (Linux bare metal):
+  |
+  +-- dm-verity на lowerdir (/usr/core/):
+  |   +-- При загрузке: ядро проверяет root hash всего lowerdir
+  |   +-- Любая модификация → hash mismatch → panic / safe mode
+  |   +-- Root hash встроен в signed kernel image (EFI Secure Boot)
+  |
+  +-- OverlayFS:
+  |   +-- lowerdir (verity): /usr/core/v1/ (read-only, verified)
+  |   +-- upperdir: /var/core/userdata/ (encrypted, read-write)
+  |   +-- workdir: /var/core/.work/
+  |   +-- merged: то, что видит runtime
+  |
+  +-- Atomic update:
+      +-- Новая версия v2 скачивается в /var/core/updates/v2/
+      +-- Verity root hash v2 проверяется по подписи
+      +-- Atomically remount: lowerdir = v2, upperdir сохраняется
+      +-- Rollback: если v2 не стартует → remount на v1 за 3 сек
+      +-- Garbage collect: v1 удаляется через 24ч после подтверждения стабильности
+```
+
+**Защита:**
+- **Tampering:** модификация системного файла невозможна (verity read-only)
+- **Rollback attacks:** каждый lowerdir versioned, старая версия удаляется только после подтверждения
+- **Persistence:** malware не может закрепиться в system partition — только upperdir (который шифрован и периодически проверяется Integrity Monitoring Agent)
+
+**Где:** Level 0 (Host Shim, mount/verity) + Level 1 (Update Engine).
+
 ---
 
 ## 22.6. Network Isolation (уровень 3)

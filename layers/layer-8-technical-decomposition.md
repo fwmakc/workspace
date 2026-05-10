@@ -20,6 +20,7 @@ Command Bar      Project Mgr      Window Mgr       App Runtime
                                                      Security Hooks
                                                      Session Mgmt
                                                      Accessibility
+                                                     Warm Recovery
 
 Search &         Communication    Voice Engine     Profile Mgr
 Tag Engine       Layer
@@ -36,6 +37,10 @@ Sync Engine      Security Layer   Display Server   Intent API
   Lazy load        Supply Chain     Remote Renderer
   Backup Engine    Incident Resp.
   Energy Manager
+
+Host Shim (Level 0)
+  eBPF/XDP         OverlayFS        Network Bridge   VFS Bridge
+  Zero-copy ABI    dm-verity        Window Mgr       Memory Bridge
 
 Storage Mgr
   Import Engine
@@ -203,11 +208,81 @@ Host Shim (Rust):
 - Если GPU не поддерживает WebGPU → Host Shim переключается на программный рендеринг (CPU) или OpenGL ES fallback
 - Производительность падает до 15–30 FPS, эффекты (blur, shadows) отключаются
 
+**Memory Bridge / Zero-copy ABI:**
+
+```
+TSCLANG / Rust (Host Shim, Level 0)
+  |
+  +-- Создаёт объект в Off-heap памяти (C-layout)
+  +-- Оборачивает в v8::External → передаёт в V8 Isolate
+  +-- JS-сторона видит ArrayBuffer, указывающий на ту же память
+  +-- ARC (Atomic Reference Count): Rust держит счётчик, V8 — Weak Callback
+  +-- При GC обёртки → декремент счётчика → освобождение нативной памяти
+```
+
+**External Memory Tracking:**
+- `AdjustAmountOfExternalAllocatedMemory`: V8 GC чувствует вес нативных блобов
+- Большой External-блоб (100 MB+) триггерит GC раньше, чем куча V8 забьётся
+- Memory Pressure Threshold: если «ожидающая» нативная память > 20% от доступной → принудительный `LowMemoryNotification()`
+
+**Где:** Level 0 (Host Shim, Rust) ↔ Level 1 (Micro-Kernel, V8/Bun).
+
 **Storage Watcher:**
 - Подписка на события хост-ОС: udev (Linux), WM_DEVICECHANGE (Windows), DiskArbitration (macOS)
 - Уведомляет Storage Manager о подключении/отключении носителей
 
 **Где:** Level 0 (Rust, системные вызовы).
+
+### eBPF / XDP (Core Base only)
+
+**Что:** На выделенном железе (Core Base, Raspberry Pi) Host Shim использует eBPF/XDP для низкоуровневой обработки сетевого трафика — P2P mesh, WireGuard, rate limiting.
+
+**Как:**
+
+```
+P2P Mesh (Level 2) -> Host Shim Network Bridge
+  |
+  +-- Обычные устройства (Windows/macOS/Linux): raw sockets через std API
+  +-- Core Base (Linux без хост-ОС):
+      +-- XDP program (eBPF) — фильтрация пакетов на уровне NIC driver
+      +-- Rate limiting: пакеты сверх лимита дропаются в ядре, не доходят до userspace
+      +-- WireGuard: обработка handshake в eBPF, data packets — fast path
+      +-- DDoS mitigation: SYN flood / UDP flood фильтруются на NIC
+```
+
+**Почему только Core Base:** На Windows/macOS eBPF/XDP недоступен — CORE работает как приложение. На Core Base (Linux bare metal) — полный контроль над сетевым стеком.
+
+**Где:** Level 0 (Host Shim, eBPF loader + XDP program).
+
+### OverlayFS / Immutable Core
+
+**Что:** Системные файлы CORE OS неизменяемы. Обновления применяются атомарно через overlay: новая версия монтируется поверх, старая остаётся для rollback.
+
+**Как:**
+
+```
+Core Base / Raspberry Pi (Linux):
+  |
+  +-- Lowerdir (read-only): системные файлы CORE OS (/usr/core/, /lib/core/)
+  +-- Upperdir (read-write): пользовательские данные, кэш, логи
+  +-- Workdir: рабочая директория OverlayFS
+  +-- Merged: то, что видит CORE runtime
+  |
+  v Обновление:
+      +-- Новая версия CORE скачивается в /var/core/updates/v2/
+      +-- Atomically remount: lowerdir = v2, upperdir сохраняется
+      +-- Если v2 не стартует → rollback к v1 за 3 секунды
+      +-- Если v2 работает 24ч → v1 удаляется (garbage collect)
+```
+
+**Безопасность:**
+- Lowerdir монтируется read-only + verity (dm-verity на Linux, signed catalog на Windows)
+- Подмена системного файла → verity mismatch → отказ загрузки → rollback
+- Upperdir шифруется AES-256-GCM (ключ на TPM/device key)
+
+**Где:** Level 0 (Host Shim, mount/verity) + Level 1 (Update Engine, atomic switch).
+
+> Подробно: security-аспекты immutable rootfs, dm-verity, rollback attacks — в [Layer Security, §22.5.4](layer-7-security.md).
 
 ---
 
@@ -583,6 +658,30 @@ Window Manager -> размещает Island как обычное окно в п
 
 **Где:** Level 2 (Бэк, V8 Isolate + WebGPU) + Level 3 (Display Server, decoder).
 
+#### 3.3.2 Static UI Overlay
+
+**Что:** Если CPU задушен (400 МГц, 256 МБ RAM) или V8 Isolate падает — система показывает статичный bitmap-интерфейс вместо живого рендеринга.
+
+**Как:**
+
+```
+Пользователь нажимает кнопку
+  |
+  v
+Display Server проверяет: V8 Isolate готов? CPU > порога?
+  |
+  +-- Да → живой рендеринг через WebGPU
+  +-- Нет → Static UI Overlay:
+      +-- Последний snapshot интерфейса (bitmap в GPU memory)
+      +-- Активные зоны (hotspots) для тач/клика
+      +-- Действие пользователя ставится в Intent Queue
+      +-- Как только V8 «продышится» — очередь исполняется пачкой
+```
+
+**Результат для пользователя:** не «фриз 12 секунд», а «медленный, но отзывчивый интерфейс». Нажал «Save» → интерфейс моргнул «Принято», файл сохранился через 30 секунд в фоне.
+
+**Где:** Level 3 (Display Server, GPU texture cache) + Level 1 (Intent Queue).
+
 ### 3.4 Тайловый и плавающий layout
 
 **Что:** Два режима размещения окон внутри проекта.
@@ -692,6 +791,21 @@ App Runtime (Level 1)
   +-- Падение -> Shadow State Recovery -> перезапуск
 ```
 
+**Resource Quotas и Memory Pressure:**
+
+| Лимит | Что | Действие при превышении |
+|-------|-----|------------------------|
+| max_old_generation_size | Лимит heap V8 | `TerminateExecution()` + уведомление пользователя |
+| max_young_generation_size | Лимит young generation | Форсированный minor GC |
+| cpu_quota | % CPU per isolate | Throttle до базового приоритета |
+| external_memory_limit | Лимит External ArrayBuffer | Блокировка новых allocation до освобождения |
+
+**Memory Pressure Handler:**
+- Host Shim мониторит доступную RAM устройства
+- При < 20% свободной памяти → `v8::Isolate::LowMemoryNotification()` для всех isolates
+- При < 10% → приостановка фоновых isolates, освобождение кэша
+- При < 5% → graceful termination неактивных приложений с сохранением state
+
 **Где:** Level 1 (Micro-Kernel, Bun + V8).
 
 ### 4.2 App Registry
@@ -743,6 +857,42 @@ App Registry (SQLite):
      v Закрытие
 Уничтожено -> Isolate убит, память освобождена, кэш кода остаётся
 ```
+
+#### 4.3.1 Warm Recovery
+
+**Что:** Если Isolate падает (panic, OOM, deadlock) — система восстанавливает его состояние из последнего checkpoint за < 100 мс. Пользователь видит «моргание», а не перезапуск приложения.
+
+**Как:**
+
+```
+Isolate работает (Активно):
+  |
+  +-- Checkpoint каждые 5 сек (async, не блокирует UI):
+  |   +-- Сериализация JS state (только user data, не DOM/V8 internals)
+  |   +-- Запись в SQLite: app_id, checkpoint_blob, timestamp
+  |   +-- Размер checkpoint: типично 10–500 KB (состояние форм, позиция скролла, открытые документы)
+  |
+  +-- При сбое Isolate:
+      +-- Host Shim обнаруживает crash (segfault, OOM kill)
+      +-- Micro-Kernel читает последний checkpoint из SQLite
+      +-- Создаётся новый Isolate с тем же app_id
+      +-- JS state восстанавливается из checkpoint
+      +-- Display Server показывает Static UI Overlay + progress: «Восстановление...» (< 100 мс)
+      +-- Пользователь продолжает работу с того же места
+```
+
+**Что НЕ сохраняется в checkpoint:**
+- WebGPU textures / buffers (пересоздаются)
+- Network connections (переподключаются)
+- Таймеры / анимации (сбрасываются)
+
+**Что сохраняется:**
+- Значения форм, текстовых полей
+- Позиция скролла, открытые вкладки
+- Выделенные элементы, фильтры поиска
+- Несохранённые изменения документа (autosave → checkpoint)
+
+**Где:** Level 1 (Micro-Kernel, Checkpoint Manager) + Level 2 (SQLite) + Level 0 (Host Shim, crash detection).
 
 ### 4.4 Sandboxing
 
@@ -1277,6 +1427,30 @@ Wake word detection (опционально):
 ```
 
 **Где:** Level 4 (Intent API) + Level 0 (Audio, Host Shim).
+
+### 7.3.1 Intent Queue
+
+**Что:** Очередь намерений пользователя, которая сохраняет действия даже при неготовности V8 Isolate или намеренном выключении UI.
+
+**Как:**
+
+```
+Пользователь нажимает «Сохранить» (CPU задушен до 400 МГц):
+  |
+  v
+Intent Queue принимает Intent = "saveProject(project_id=42)"
+  |
+  v
+Вместо мгновенного выполнения:
+  +-- ACK: «Принято» (Static UI Overlay показывает checkmark)
+  +-- Подписка: как только CPU разгонится — Intent исполнится
+  +-- Если Intent > 5 сек — бэк-офис показывает progress bar
+  +-- Если Intent невозможен (нет прав, нет сети) — TTS: "Не удалось сохранить, нужен интернет"
+```
+
+**Почему это важно:** Без очереди пользователь при задушенном CPU видит «фриз» и думает, что система сломалась. С очередью — видит «Принято» и доверяет системе.
+
+**Где:** Level 1 (UX) + Level 2 (Бэк, V8 Isolate queue) + Level 3 (Display Server, overlay).
 
 ### 7.4 Безопасность голосового ввода
 
@@ -2323,6 +2497,33 @@ Component Manager (Level 1):
 ```
 
 **Где:** Level 1 (Micro-Kernel, Component Manager).
+
+### 16.3 Self-healing Back-office
+
+**Что:** Бэк-офис обнаруживает собственные сбои и восстанавливается без участия пользователя.
+
+**Как:**
+
+```
+Watchdog (уровень Бэка):
+  |
+  +-- Health Check каждые 30 сек:
+  |   +-- SQLite — запрос SELECT 1
+  |   +-- CRDT Journal — последняя запись < 5 мин назад
+  |   +-- P2P Mesh — количество пиров > 0 (если устройство не офлайн)
+  |   +-- Memory — RSS < 80% от лимита
+  |
+  +-- При сбое:
+      +-- SQLite: автоматический ROLLBACK + REINDEX при битом индексе
+      +-- CRDT Journal: truncate до последнего валидного root hash
+      +-- P2P Mesh: реинициализация сетевого стека, fallback на TCP relay
+      +-- Memory: graceful restart компонента (не всего Бэка)
+      +-- Если 3 сбоя подряд → уведомление Owner: "Требуется внимание"
+```
+
+**Принцип Digital Refrigerator:** Пользователь включает Бэк-офис и забывает про него. Watchdog гарантирует, что система сама себя чинит 95% случаев.
+
+**Где:** Level 1 (Micro-Kernel, Watchdog) + Level 2 (Бэк, Health Check API).
 
 ---
 
