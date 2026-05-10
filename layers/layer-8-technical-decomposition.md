@@ -808,6 +808,27 @@ Game Mode activated:
 - Host Shim настраивает VSync + present mode (FIFO_RELAXED для Variable Refresh Rate)
 - Если игра не укладывается в target — automatic resolution scaling (render scale 0.5–1.0)
 
+**Переключение контекста (Alt+Tab):**
+
+Когда пользователь переключается из Game Mode в Shell (Alt+Tab, Panic Gesture, уведомление):
+
+1. **Display Server** не уничтожает GPU-контекст, а переводит его в **shadow state**: последний валидный framebuffer сохраняется в dedicated GPU memory region
+2. **Isolate игры** приостанавливается (freeze), не убивается — состояние сериализуется в checkpoint (как в Warm Recovery)
+3. **Display Server** возвращается к композиции: shadow framebuffer используется как «застывший» background для рабочего стола
+4. **Переключение назад** (повторный Alt+Tab):
+   - Resume isolate из checkpoint (< 100 мс)
+   - GPU-контекст восстанавливается из shadow state
+   - Игра продолжает с того же кадра (если поддерживает pause-on-focus-lost) или с минимальным откатом
+
+**Время переключения:**
+- Shell → Game Mode: 1–2 кадра (16–33 мс на 60 Гц)
+- Game Mode → Shell: мгновенно (shadow framebuffer уже в памяти)
+- Game Mode → Shell → Game Mode: < 100 мс (resume isolate)
+
+**Исключение — exclusive fullscreen (Vulkan/DirectX):**
+- Если игра требует exclusive GPU access (не borderless), переключение требует recreate swapchain: 100–300 мс
+- Host Shim предпочитает borderless mode, но предоставляет exclusive по запросу приложения
+
 **Выход из Game Mode:**
 - `Esc` (удержание 2 сек) → Window Manager восстанавливает композитинг
 - Panic Gesture → Host Shim принудительно убивает isolate, возвращает Display Server
@@ -1059,6 +1080,50 @@ Isolate работает (Активно):
 - Несохранённые изменения документа (autosave → checkpoint)
 
 **Где:** Level 1 (Micro-Kernel, Checkpoint Manager) + Level 2 (SQLite) + Level 0 (Host Shim, crash detection).
+
+#### 4.3.2 Native Process Monitor
+
+**Что:** Механизм принудительного завершения нативных процессов (level 4 приложения в Game Mode, нативные модули), которые потребляют чрезмерные ресурсы или зависли вне V8 Isolate.
+
+**Проблема:** Warm Recovery работает только для V8 Isolates. Нативное приложение (level 4, direct GPU context) может:
+- Утечь памяти в native heap (вне контроля V8 heap limit)
+- Зависнуть в бесконечном цикле на CPU (SCHED_RR не спасает от логических deadlock)
+- Заблокировать GPU командой (например, infinite loop в shader)
+
+**Как:**
+
+```
+Host Shim мониторит нативные процессы:
+  |
+  +-- Memory watchdog:
+  |   +-- Процесс потребил >85% доступной RAM хост-ОС
+  |   +-- Процесс потребил >95% RAM, выделенной CORE
+  |   +-- Action: graceful suspend → сохранение checkpoint → kill process
+  |
+  +-- CPU watchdog:
+  |   +-- Процесс не отвечает на heartbeat 500 мс (в Game Mode: 50 мс)
+  |   +-- CPU usage >95% на одном ядре >5 сек
+  |   +-- Action: kill process + Static UI Overlay «Приложение не отвечает»
+  |
+  +-- GPU watchdog:
+  |   +-- GPU fence не возвращается >2 сек (deadlock в драйвере)
+  |   +-- Action: GPU reset (TDR на Windows, аналог на других платформах) + recovery
+  |
+  +-- User-initiated kill:
+      +-- Command Bar → «задачи» → список процессов с RAM/CPU → «завершить»
+      +-- Panic Gesture (тройное касание) → мгновенный kill активного приложения
+```
+
+**Восстановление после kill:**
+- Если есть checkpoint (Game Mode приложения обязаны писать checkpoint каждые 5 сек) → Warm Recovery из checkpoint
+- Если нет checkpoint → приложение запускается заново, пользователь теряет несохранённое состояние
+
+**Безопасность:**
+- Kill выполняется Host Shim на уровне ОС (SIGKILL / TerminateProcess), не через API CORE
+- После kill — GPU memory zeroize (очистка framebuffer и textures перед передачей другому приложению)
+- Нативный процесс не может перехватить watchdog — heartbeat проверяется Host Shim извне
+
+**Где:** Level 0 (Host Shim, OS-level process management) + Level 1 (Micro-Kernel, policy engine).
 
 ### 4.4 Sandboxing
 
