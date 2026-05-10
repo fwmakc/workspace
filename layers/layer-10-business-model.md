@@ -1,4 +1,4 @@
-# Layer 9 — Business Model | Бизнес-модель и Go-to-Market
+# Layer 10 — Business Model | Бизнес-модель и Go-to-Market
 
 Монетизация и выход на рынок. Hardware (Core-Plug), B2B SaaS, marketplace, OEM. Go-to-Market: от Pro Tool для разработчиков к массовому рынку. Целевые сегменты: B2B/B2G (MedTech, FinTech, оборонка, промышленность), массовый рынок.
 

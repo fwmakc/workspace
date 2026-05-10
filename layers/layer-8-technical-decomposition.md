@@ -16,25 +16,26 @@ Command Bar      Project Mgr      Window Mgr       App Runtime
   Suggest          Sessions         Web-окна         App Registry
   8 режимов        Layout           Нативные         Lifecycle
   Settings         Home             Layout           Sandboxing
+                                    Remote Renderer  Permissions UI
+                                                     Security Hooks
+                                                     Session Mgmt
+                                                     Accessibility
 
 Search &         Communication    Voice Engine     Profile Mgr
 Tag Engine       Layer
   Full-text        Messenger        Whisper          Switching
   Tags             Email            Intent Parser    Freeze/Thaw
   Graph            VoIP             Zero UI          Anonymous
-  Smart Folders    AI bridge                         Background
+  Smart Folders    AI bridge        LED / Buffer     Background
+                   Техподдержка
 
 Sync Engine      Security Layer   Display Server   Intent API
   P2P mesh         Key Manager      WebGPU           Semantic Kernel
   CRDT             Auth Proxy       Layout Engine    Intent Map
   Devices          Encrypt          Effects          Generative UI
-  Lazy load
-
-Space Manager    Notifications    Clipboard        RBAC & Audit
-  Размещение       Единый поток     Мультибуфер      Роли (Owner/Member/Guest)
-  Состояния        Приоритеты       Стек истории     Группы
-  Визуальное       Метки Space      Фильтры          Аудит-лог (13 категорий)
-  Оффлайн          Push             Политики Бэка    User Directory
+  Lazy load        Supply Chain     Remote Renderer
+  Backup Engine    Incident Resp.
+  Energy Manager
 
 Storage Mgr
   Import Engine
@@ -889,7 +890,7 @@ WebGPU Pipeline (Level 3):
 
 ---
 
-## 4.6 Scheduler
+### 4.6 Scheduler
 
 **Что:** Планировщик задач, напоминаний и фоновых операций.
 
@@ -908,7 +909,7 @@ Scheduler (Level 1):
 
 ---
 
-## 4.7 Update Engine
+### 4.7 Update Engine
 
 **Что:** Проверка, скачивание и установка обновлений приложений.
 
@@ -928,7 +929,7 @@ Update Engine (Level 1):
 
 ---
 
-## 4.8 Error Reporting Engine
+### 4.8 Error Reporting Engine
 
 **Что:** Сбор и отправка отчётов об ошибках.
 
@@ -948,7 +949,7 @@ Error Reporting Engine (Level 1):
 
 ---
 
-## 4.9 core-dev (Developer CLI)
+### 4.9 core-dev (Developer CLI)
 
 **Что:** CLI-инструмент разработчика приложений для CORE OS.
 
@@ -964,7 +965,7 @@ Error Reporting Engine (Level 1):
 
 ---
 
-## 4.10 @core/mock
+### 4.10 @core/mock
 
 **Что:** npm-пакет для тестирования приложений уровней 4–5 вне CORE OS.
 
@@ -977,7 +978,7 @@ Error Reporting Engine (Level 1):
 
 ---
 
-## 4.11 Window Injection & Env Injection
+### 4.11 Window Injection & Env Injection
 
 **Window Injection (`window.__CORE_OS__`):**
 - Передача конфигурации в Island Mode (Chromium sandbox) до загрузки страницы
@@ -1829,7 +1830,7 @@ Fallback:
 
 ---
 
-## 9.7 Backup Engine
+### 9.7 Backup Engine
 
 **Что:** Резервное копирование данных Бэка на внешние носители.
 
@@ -1853,7 +1854,7 @@ Backup Engine (Level 1):
 
 ---
 
-## 9.8 Energy Manager
+### 9.8 Energy Manager
 
 **Что:** Управление энергопотреблением и производительностью.
 
