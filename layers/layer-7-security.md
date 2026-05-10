@@ -2,8 +2,6 @@
 
 Единый документ по безопасности CORE OS. Собран из всех слоёв проектирования: от пользовательского опыта до технической реализации.
 
-Ссылки: [layer-1-user-experience.md](layer-1-user-experience.md), [layer-2-ai.md](layer-2-ai.md), [layer-3-system-split.md](layer-3-system-split.md), [layer-4-installation-scenarios.md](layer-4-installation-scenarios.md), [layer-5-devices.md](layer-5-devices.md), [layer-6-apps.md](layer-6-apps.md), [layer-8-technical-decomposition.md](layer-8-technical-decomposition.md).
-
 ---
 
 ## Принцип
@@ -1721,3 +1719,15 @@ jobs:
 | [Layer: Установка](layer-4-installation-scenarios.md) | Сценарии установки — бэкап, обновления, техподдержка в контексте каждого сценария |
 | [Layer: Подсистемы](layer-8-technical-decomposition.md) | Security-аспекты подсистем (Key Manager, Auth Proxy, RBAC Engine, Audit Engine, Clipboard) |
 | [Layer: Apps](layer-6-apps.md) | Security model по уровням приложений (sandbox, permissions, app-scoped data) |
+
+---
+
+## Предыдущий слой
+
+Layer 6 описывает модель приложений — 5 уровней интеграции, манифест `core.json`, App Registry, обновления и безопасность приложений. [См. layer-6-apps.md](layer-6-apps.md).
+
+---
+
+## Следующий слой
+
+Layer 8 описывает техническую декомпозицию подсистем — какие компоненты входят во Фронт и Бэк, как данные текут между ними, на каком уровне архитектуры каждая живёт. [См. layer-8-technical-decomposition.md](layer-8-technical-decomposition.md).
