@@ -18,12 +18,13 @@ os/
 │   └── gorynych.md              # Консорциум Яндекс/Сбер/ВК
 ├── layers/                      # Слои проектирования (сверху вниз)
 │   ├── layer-1-user-experience.md          # UX + Space: что видит пользователь
-│   ├── layer-2-system-split.md             # Фронт (Shell) и Бэк (Backoffice)
-│   ├── layer-3-installation-scenarios.md   # Сценарии установки и эксплуатации
-│   ├── layer-7-technical-decomposition.md  # Подсистемы: техническая декомпозиция
-│   ├── layer-6-security.md                 # Безопасность: единый кросс-слойный документ
-│   ├── layer-4-devices.md                  # Устройства и носители: USB, диски, сеть, P2P, принтеры
-│   ├── layer-5-apps.md                     # Модель приложений: 5 уровней интеграции
+│   ├── layer-2-ai.md                       # AI-слой: Intent API, Voice, Generative UI, Smart Scheduler
+│   ├── layer-3-system-split.md             # Фронт (Shell) и Бэк (Backoffice)
+│   ├── layer-4-installation-scenarios.md   # Сценарии установки и эксплуатации
+│   ├── layer-5-devices.md                  # Устройства и носители: USB, диски, сеть, P2P, принтеры
+│   ├── layer-6-apps.md                     # Модель приложений: 5 уровней интеграции
+│   ├── layer-7-security.md                 # Безопасность: единый кросс-слойный документ
+│   ├── layer-8-technical-decomposition.md  # Подсистемы: техническая декомпозиция
 ├── project/                     # Проектная документация
 │   ├── vision.md                # Видение и философия
 │   ├── architecture.md          # 5-уровневая архитектура

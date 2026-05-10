@@ -1,4 +1,4 @@
-﻿# Layer 5 — Apps | Модель приложений
+﻿# Layer 6 — Apps | Модель приложений
 
 Как приложения работают в CORE OS. 5 уровней интеграции — от нуля усилий до полного натива. Разработчик выбирает сам.
 
@@ -1243,6 +1243,6 @@ if (process.env.CORE_OS === 'true') {
 | Слой | Что описано |
 |------|-------------|
 | [Layer: UX](layer-1-user-experience.md) | Приложения — без установки, живут внутри проектов |
-| [Layer: Фронт/Бэк](layer-2-system-split.md) | V8 Isolates, Island Mode, App Registry как компоненты |
-| [Layer: Подсистемы](layer-7-technical-decomposition.md) | App Runtime, App Registry, Capability Security — технически |
-| [Layer: Безопасность](layer-6-security.md) | Capability model, permissions, sandboxing по уровням приложений |
+| [Layer: Фронт/Бэк](layer-3-system-split.md) | V8 Isolates, Island Mode, App Registry как компоненты |
+| [Layer: Подсистемы](layer-8-technical-decomposition.md) | App Runtime, App Registry, Capability Security — технически |
+| [Layer: Безопасность](layer-7-security.md) | Capability model, permissions, sandboxing по уровням приложений |
