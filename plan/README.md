@@ -1,4 +1,4 @@
-# План реализации CORE OS — 29 этапов
+# План реализации CORE OS — 37 этапов
 
 > Этот документ описывает пошаговую разработку CORE OS от фундамента до готовой системы. Каждый этап — самодостоятельная единица: после его завершения систему можно собрать и протестировать. Этапы следуют строго последовательно.
 
@@ -30,7 +30,7 @@
 | 8 | Host Shim: Network | Rust | Сокеты, WireGuard, P2P transport на всех ОС | 3 недели |
 | 9 | Display Server: Core | Rust | WebGPU инициализация, swapchain, базовый рендер | 3 недели |
 | 10 | Display Server: 2D | Rust | Примитивы, текст (все алфавиты), текстуры | 3 недели |
-| 11 | Display Server: Compositor & Game Mode | Rust | Scene graph, эффекты, Game Mode direct GPU | 4 недели |
+| 11 | Display Server: Compositor | Rust | Scene graph, эффекты, Overlay Layer | 4 недели |
 
 ### TypeScript/Bun-этапы (Micro-Kernel + Фронт + Бэк)
 
@@ -39,23 +39,36 @@
 | 12 | Micro-Kernel: Core & IPC | TS/Bun | Bun runtime, IPC bridge, SQLite schema | 3 недели |
 | 13 | Micro-Kernel: Security Engine | TS/Bun | Capability Security, RBAC base, sandbox | 2 недели |
 | 14 | Micro-Kernel: VFS | TS/Bun | Виртуальная ФС, CID, теги, Smart Folders | 3 недели |
-| 15 | Command Bar Engine | TS/Bun | 8 режимов ввода, suggestions, hotkeys | 3 недели |
-| 16 | Project Manager | TS/Bun | Проекты, Spaces, теги, layout, checkpoint | 3 недели |
-| 17 | Window Manager | TS/Bun | Окна, Z-стек, snap, Alt+Tab, Static UI Overlay | 3 недели |
-| 18 | CRDT Engine | TS/Bun | Causal Trees, LWW, oplog, локальная sync | 3 недели |
-| 19 | P2P Mesh | TS/Bun | mDNS, libp2p, WireGuard, global sync, handoff | 4 недели |
-| 20 | Backup Engine | TS/Bun | 3-2-1 backup, USB/S3/P2P, restore, recovery phrase | 3 недели |
-| 21 | App Registry | TS/Bun | Установка, обновление, удаление, core.json, подписи | 2 недели |
-| 22 | V8 Isolate Runtime | TS/Bun | Sandbox, @core/* API, permissions UI, checkpoint | 4 недели |
-| 23 | Island Mode | TS/C++ | WebView embedding, CEF/WebKit, web sandbox | 3 недели |
-| 24 | Messenger Engine | TS/Bun | P2P чат, группы, CRDT messages, offline delivery | 3 недели |
-| 25 | Email & VoIP | TS/Bun | IMAP/SMTP, WebRTC calls через WireGuard | 3 недели |
-| 26 | Voice Pipeline | TS/Rust | Whisper ASR, TTS, Zero UI, Intent Queue | 3 недели |
-| 27 | Intent API & AI Core | TS/Bun | Intent parser, Generative UI, Smart Scheduler, Cloud Bridge | 4 недели |
-| 28 | Security Core | TS/Bun | RBAC full, Audit (13 кат.), Key Manager, Session, remote wipe | 3 недели |
-| 29 | Admin UI & System Polish | TS/Rust | Backoffice, Hardcore, Game Mode API, Energy, Accessibility, Themes, Docs | 4 недели |
+| 15 | Command Bar: Engine | TS/Bun | 8 режимов, парсер, suggestions, hotkeys | 3 недели |
+| 16 | Command Bar: UI | TS/Bun | Рендеринг Command Bar, анимации, mobile, accessibility | 2 недели |
+| 17 | Project Manager | TS/Bun | Проекты, Spaces, теги, layout, checkpoint | 3 недели |
+| 18 | Window Manager | TS/Bun | Окна, Z-стек, snap, Alt+Tab, Static UI Overlay | 3 недели |
+| 19 | CRDT Engine | TS/Bun | Causal Trees, LWW, oplog, локальная sync | 3 недели |
+| 20 | P2P Mesh | TS/Bun | mDNS, libp2p, WireGuard, global sync, handoff | 4 недели |
+| 21 | Backup Engine | TS/Bun | 3-2-1 backup, USB/S3/P2P, restore, recovery phrase | 3 недели |
+| 22 | App Registry | TS/Bun | Установка, обновление, удаление, core.json, подписи | 2 недели |
+| 23 | V8 Isolate Runtime | TS/Bun | Sandbox, @core/* API, permissions UI, checkpoint | 4 недели |
+| 24 | Island Mode | TS/C++ | WebView embedding, CEF/WebKit, web sandbox | 3 недели |
+| 25 | Messenger Engine | TS/Bun | P2P чат, группы, CRDT messages, offline delivery | 3 недели |
+| 26 | Email Engine | TS/Bun | IMAP/SMTP, композер, FTS, drafts | 3 недели |
+| 27 | VoIP Engine | TS/Bun | WebRTC через WireGuard, Opus, signaling | 3 недели |
+| 28 | Voice Pipeline | TS/Rust | Whisper ASR, TTS, Zero UI, Intent Queue | 3 недели |
+| 29 | Intent API & AI Core | TS/Bun | Intent parser, Generative UI, Smart Scheduler, Cloud Bridge | 4 недели |
+| 30 | Security Core | TS/Bun | RBAC full, Audit (13 кат.), Key Manager, Session, remote wipe | 3 недели |
 
-**Итого:** ~80 недель (20 месяцев) на полноценную систему командой 5–7 человек.
+### System Polish & DevOps
+
+| Этап | Название | Язык | Что работает после завершения | Примерное время |
+|------|----------|------|-------------------------------|-----------------|
+| 31 | Admin UI | TS/Rust | Backoffice GUI, Hardcore TUI/CLI, SSH | 3 недели |
+| 32 | Game Mode & Energy | TS/Rust | Direct GPU, input exclusivity, battery policies | 2 недели |
+| 33 | Accessibility & Themes | TS/Rust | High contrast, screen reader, themes, keyboard nav | 2 недели |
+| 34 | Performance Optimizations | TS/Rust | Rendering, memory, P2P, profiling, budget | 3 недели |
+| 35 | Stress Tests | TS/Rust | 1000 окон, CRDT sync, memory, network, battery | 2 недели |
+| 36 | CI/CD Pipeline | YAML/Shell | Build matrix, tests, security audit, signed releases | 2 недели |
+| 37 | Documentation | Markdown | User, developer, admin docs, API reference, site | 3 недели |
+
+**Итого:** ~90 недель (22 месяца) на полноценную систему командой 5–7 человек.
 
 ---
 
@@ -95,31 +108,31 @@
 ```
 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11
                                                   ↓
-12 → 13 → 14 → 15 → 16 → 17
+12 → 13 → 14 → 15 → 16 → 17 → 18
    ↓               ↓       ↓       ↓
-  18 → 19 → 20   21 → 22 → 23
+  19 → 20 → 21   22 → 23 → 24
    ↓       ↓               ↓
-  24 → 25               26 → 27
+  25 → 26 → 27           28 → 29
                             ↓
-                            28 → 29
+                            30 → 31 → 32 → 33 → 34 → 35 → 36 → 37
 ```
 
-Все этапы Rust (1–11) не зависят от TS-этапов (12–29) и могут разрабатываться параллельно в начале. Однако в плане они упорядочены последовательно: каждый следующий этап использует результаты предыдущего как reference или shared abstraction.
+Все этапы Rust (1–11) не зависят от TS-этапов (12–37) и могут разрабатываться параллельно в начале. Однако в плане они упорядочены последовательно.
 
 ---
 
 ## Cross-reference со слоями
 
-Каждый этап явно ссылается на файлы из `layers/` через относительные ссылки (`../layers/layer-N-*.md`). Для быстрого поиска:
+Каждый этап явно ссылается на файлы из `layers/` через относительные ссылки (`../layers/layer-N-*.md`).
 
-- **layer-1** (UX) → этапы 11, 15, 16, 17, 24, 25, 26, 29
-- **layer-2** (AI) → этапы 26, 27
-- **layer-3** (System Split) → этапы 12, 16, 17, 19, 24, 28, 29
-- **layer-4** (Installation) → этапы 1, 2, 3, 4, 5, 20, 29
-- **layer-5** (Devices) → этапы 7, 8, 14, 18, 19
-- **layer-6** (Apps) → этапы 13, 21, 22, 23
-- **layer-7** (Security) → этапы 13, 20, 25, 28, 29
+- **layer-1** (UX) → этапы 11, 15–18, 25–29, 32–33
+- **layer-2** (AI) → этапы 28–29
+- **layer-3** (System Split) → этапы 12, 17–18, 20, 25, 30–31
+- **layer-4** (Installation) → этапы 1–5, 21, 31–32
+- **layer-5** (Devices) → этапы 7–8, 14, 19–21, 26–27
+- **layer-6** (Apps) → этапы 13, 22–24
+- **layer-7** (Security) → этапы 13, 21, 26–27, 30–31
 - **layer-8** (Technical Decomposition) → все этапы
-- **layer-9** (Hardware) → этапы 1–11, 29
-- **layer-10** (Business) → этап 29 (docs)
-- **layer-11** (Developer Reference) → этапы 15, 21, 22, 27, 29
+- **layer-9** (Hardware) → этапы 1–11, 32–35
+- **layer-10** (Business) → этап 37
+- **layer-11** (Developer Reference) → этапы 15–16, 22–24, 29, 37

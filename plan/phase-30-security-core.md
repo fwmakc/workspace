@@ -1,4 +1,4 @@
-# Этап 28 — Security Core
+# Этап 30 — Security Core
 
 ## Цель
 Встроить в систему полноценную безопасность: RBAC, аудит (13 категорий), Key Manager (Ed25519, TPM/Secure Enclave), Session Management (TTL, auto-lock, remote wipe), и Secure Transaction API. После этого этапа CORE OS защищена на всех уровнях: аутентификация, авторизация, шифрование, аудит.
@@ -13,7 +13,7 @@
 - **Этап 12** — Micro-Kernel: Core (SQLite, event loop).
 - **Этап 13** — Micro-Kernel: Security (capability model, base RBAC).
 - **Этап 14** — Micro-Kernel: VFS (файлы для audit export).
-- **Этап 20** — Backup Engine (recovery phrase, encryption).
+- **Этап 21** — Backup Engine (recovery phrase, encryption).
 
 ## Часть системы
 **Level 1 — Бэк: Security Infrastructure** [См. layer-7 §22, layer-8 §4.4, §8, §15, layer-3 §3]

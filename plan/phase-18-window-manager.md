@@ -1,4 +1,4 @@
-# Этап 17 — Window Manager
+# Этап 18 — Window Manager
 
 ## Цель
 Создать Window Manager — подсистему управления окнами: создание, закрытие, фокус, Z-стек, snap, переключение, и интеграция с Display Server. После этого этапа CORE OS умеет открывать несколько окон, переключаться между ними, и управлять их расположением.
@@ -12,7 +12,7 @@
 ## Зависимости
 - **Этап 11** — Display Server: Compositor (scene graph, damage tracking, effects, chrome rendering).
 - **Этап 15** — Command Bar (Alt+Tab, глобальные хоткеи).
-- **Этап 16** — Project Manager (layout, snap, checkpoint).
+- **Этап 17** — Project Manager (layout, snap, checkpoint).
 
 ## Часть системы
 **Level 1 — Фронт: Window Manager** [См. layer-8 §3, layer-1 §4.2, layer-3 §2]

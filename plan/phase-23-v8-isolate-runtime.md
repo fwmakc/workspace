@@ -1,4 +1,4 @@
-# Этап 22 — V8 Isolate Runtime
+# Этап 23 — V8 Isolate Runtime
 
 ## Цель
 Создать runtime для нативных приложений CORE OS на базе V8 Isolates (через Bun). После этого этапа приложения level 3–5 могут запускаться в sandbox, иметь доступ к `@core/*` API, и взаимодействовать с системой через capabilities.
@@ -13,7 +13,7 @@
 - **Этап 12** — Micro-Kernel: Core (IPC, event loop, SQLite).
 - **Этап 13** — Micro-Kernel: Security (capability checks, sandbox policies).
 - **Этап 14** — Micro-Kernel: VFS (файловый доступ).
-- **Этап 21** — App Registry (установленные приложения, core.json, capabilities).
+- **Этап 22** — App Registry (установленные приложения, core.json, capabilities).
 - **Этап 11** — Display Server: Compositor (текстуры для рендеринга).
 
 ## Часть системы

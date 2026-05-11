@@ -1,4 +1,4 @@
-# Этап 27 — Intent API & AI Core
+# Этап 29 — Intent API & AI Core
 
 ## Цель
 Создать систему Intent — обработку намерений пользователя: парсинг текста/голоса, разрешение в действия, Generative UI, Smart Scheduler, и Cloud Bridge для внешних AI. После этого этапа CORE OS понимает, чего хочет пользователь, и выполняет или генерирует интерфейс для этого.
@@ -12,8 +12,8 @@
 ## Зависимости
 - **Этап 12** — Micro-Kernel: Core (SQLite, event loop).
 - **Этап 15** — Command Bar (текстовый ввод, режим Ask).
-- **Этап 26** — Voice Pipeline (ASR output → текст для Intent).
-- **Этап 22** — V8 Isolate Runtime (Generative UI рендерится через `@core/ui`).
+- **Этап 28** — Voice Pipeline (ASR output → текст для Intent).
+- **Этап 23** — V8 Isolate Runtime (Generative UI рендерится через `@core/ui`).
 
 ## Часть системы
 **Level 4 — Intent API** [См. layer-8 §7.1–7.12, layer-2 §2, layer-1 §2.4]

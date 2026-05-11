@@ -1,4 +1,4 @@
-# Этап 26 — Voice Pipeline
+# Этап 28 — Voice Pipeline
 
 ## Цель
 Создать голосовой интерфейс: распознавание речи (ASR через Whisper), синтез речи (TTS), Zero UI (голосовые команды без экрана), и Intent Queue (обработка при перегрузке CPU). После этого этапа пользователь может управлять CORE OS голосом.
@@ -13,7 +13,7 @@
 - **Этап 6** — Host Shim: Audio (capture/playback, ring buffers).
 - **Этап 12** — Micro-Kernel: Core (event loop, IPC).
 - **Этап 15** — Command Bar (Input Router для voice input).
-- **Этап 27** — Intent API (voice → Intent → Action, placeholder на этом этапе).
+- **Этап 29** — Intent API (voice → Intent → Action, placeholder на этом этапе).
 
 ## Часть системы
 **Level 4 — Voice Engine** [См. layer-8 §7, layer-2 §3, layer-1 §7]

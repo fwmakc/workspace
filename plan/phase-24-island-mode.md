@@ -1,4 +1,4 @@
-# Этап 23 — Island Mode
+# Этап 24 — Island Mode
 
 ## Цель
 Создать Island Mode — sandbox для веб-контента (HTML/CSS/JS) и legacy-приложений на базе встроенного Chromium (CEF) или аналога. После этого этапа пользователь может открывать веб-сайты и веб-приложения в изолированном окне с ограниченным доступом к системе.
@@ -12,8 +12,8 @@
 ## Зависимости
 - **Этап 11** — Display Server: Compositor (текстура для embedding webview).
 - **Этап 13** — Micro-Kernel: Security (capability checks для web-контента).
-- **Этап 21** — App Registry (core.json для level 1–2 приложений).
-- **Этап 22** — V8 Isolate Runtime (shared sandbox infrastructure).
+- **Этап 22** — App Registry (core.json для level 1–2 приложений).
+- **Этап 23** — V8 Isolate Runtime (shared sandbox infrastructure).
 
 ## Часть системы
 **Level 2 — Island Mode** [См. layer-8 §3.2, layer-6 §2.1, layer-11 §App Model]
