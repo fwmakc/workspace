@@ -33,12 +33,41 @@ CORE OS is a **host-agnostic overlay runtime** that provides a unified, secure w
 └─────────────────────────────────────────────┘
 ```
 
+### Repository structure
+
+```
+├── archive/          # Raw brainstorming + historical code snapshots (read-only)
+├── layers/           # Design layers (UX → AI → Security → Hardware)
+├── plan/             # 37 implementation phases + roadmap
+├── src/              # Source code
+│   ├── demo/         # Phase 0: playable prototype (wgpu + winit + fontdue)
+│   ├── display_server/
+│   ├── host_shim/
+│   ├── island_mode/
+│   └── micro_kernel/
+├── tests/            # Cross-phase test specs
+└── log/              # Development session logs
+```
+
 ### Current status
+- **Phase 0 (Playable Demo):** ✅ Complete. Window, rendering, cursor, shapes, text, command bar. Runs on Windows 11 (native Vulkan) and WSL2 Ubuntu (llvmpipe via WSLg).
 - **Phase 1–11 (Host Shim + Display Server):** Specification complete, implementation in progress.
 - **Phase 12+ (Micro-Kernel & Apps):** Architecture frozen, awaiting Rust foundation.
-- **First runnable milestone:** Host window + event loop on Windows — ETA Q3 2026.
 
 See [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for a detailed progress report.
+
+### Quick start
+
+```bash
+# Run the Phase 0 demo (Windows or WSL2 with GUI support)
+cd src && cargo run --bin demo
+
+# Run tests
+cargo test
+
+# Strict linting (must pass on both Windows and Linux)
+cargo clippy -- -D warnings
+```
 
 ### Quick links
 - [Project Status](PROJECT_STATUS.md)
@@ -46,6 +75,7 @@ See [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for a detailed progress report.
 - [Architecture Layers](layers/)
 - [Contributing](CONTRIBUTING.md)
 - [Security Policy](SECURITY.md)
+- [Agent Configuration](AGENTS.md) — coding standards & environment notes
 
 ---
 
@@ -59,12 +89,41 @@ CORE OS — это **кросс-платформенный overlay runtime**, к
 - **Совместимость с legacy:** Web-native приложения и обёртки над legacy-инструментами сосуществуют в одной среде.
 - **Локальный ИИ:** Intent-based UI, голосовое управление и умное планирование работают на устройстве через ONNX / Ollama.
 
+### Структура репозитория
+
+```
+├── archive/          # «Сырой» мозговой штурм + исторические снапшоты кода (только для чтения)
+├── layers/           # Слои проектирования (UX → AI → Безопасность → Железо)
+├── plan/             # 37 фаз реализации + дорожная карта
+├── src/              # Исходный код
+│   ├── demo/         # Фаза 0: играбельный прототип (wgpu + winit + fontdue)
+│   ├── display_server/
+│   ├── host_shim/
+│   ├── island_mode/
+│   └── micro_kernel/
+├── tests/            # Тесты сквозь фазы
+└── log/              # Логи разработки по сессиям
+```
+
 ### Текущий статус
+- **Фаза 0 (Playable Demo):** ✅ Завершена. Окно, рендеринг, курсор, фигуры, текст, командная строка. Работает на Windows 11 (нативный Vulkan) и WSL2 Ubuntu (llvmpipe через WSLg).
 - **Фазы 1–11 (Host Shim + Display Server):** Спецификация завершена, ведётся реализация.
 - **Фазы 12+ (Micro-Kernel и приложения):** Архитектура зафиксирована, ожидается завершение Rust-фундамента.
-- **Первая runnable-milestone:** Окно + event loop на Windows — ожидается Q3 2026.
 
 См. [`PROJECT_STATUS.md`](PROJECT_STATUS.md) для детального отчёта о прогрессе.
+
+### Быстрый старт
+
+```bash
+# Запустить демо фазы 0 (Windows или WSL2 с GUI)
+cd src && cargo run --bin demo
+
+# Запустить тесты
+cargo test
+
+# Строгий линтинг (должен проходить и на Windows, и на Linux)
+cargo clippy -- -D warnings
+```
 
 ### Ссылки
 - [Статус проекта](PROJECT_STATUS.md)
@@ -72,6 +131,7 @@ CORE OS — это **кросс-платформенный overlay runtime**, к
 - [Архитектурные слои](layers/)
 - [Участие в проекте](CONTRIBUTING.md)
 - [Политика безопасности](SECURITY.md)
+- [Конфигурация для агентов](AGENTS.md) — стандарты кода и заметки по окружению
 
 ---
 

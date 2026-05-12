@@ -1,0 +1,21 @@
+[package]
+name = "coreos-demo"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+winit = { workspace = true }
+wgpu = { workspace = true }
+pollster = "0.3"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+bytemuck = { version = "1.16", features = ["derive"] }
+fontdue = "0.9"
+
+[[bin]]
+name = "demo"
+path = "src/main.rs"

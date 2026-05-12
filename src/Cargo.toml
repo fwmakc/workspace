@@ -6,6 +6,7 @@ members = [
     "island_mode",
     "fuzzy_search",
     "tests",
+    "demo",
 ]
 resolver = "2"
 

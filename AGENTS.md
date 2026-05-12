@@ -9,13 +9,15 @@ Cross-platform overlay runtime providing a unified, secure workspace across Wind
 ```
 os/
 ├── AGENTS.md                    # This file — project configuration
-├── archive/                     # Original brainstorming sessions
+├── archive/                     # Original brainstorming sessions + code snapshots (read-only)
+│   ├── README.md                # What lives in archive/
 │   ├── core.md                  # Core brainstorm
 │   ├── architector.md           # Technical architecture review
 │   ├── marketolog.md            # Marketing strategy
 │   ├── investor.md              # Investor pitch draft (internal)
 │   ├── gazprom.md               # Industrial case study (Gazprom)
-│   └── gorynych.md              # Yandex/Sber/VK consortium scenario
+│   ├── gorynych.md              # Yandex/Sber/VK consortium scenario
+│   └── demo/                    # Phase 0 prototype snapshot before refactoring
 ├── layers/                      # Design layers (top-down)
 │   ├── layer-1-user-experience.md          # UX + Space: user-facing layer
 │   ├── layer-2-ai.md                       # AI layer: Intent API, Voice, Generative UI
@@ -32,12 +34,24 @@ os/
 │   ├── README.md                # Splitting principles, phase summary
 │   ├── roadmap.md               # Human-readable description of all 37 phases
 │   └── phase-01..37             # Detailed phase specifications
-└── src/                         # Source code
-    ├── display_server/
-    ├── host_shim/
-    ├── island_mode/
-    └── micro_kernel/
+├── src/                         # Source code
+│   ├── demo/                    # Phase 0: playable prototype (disposable)
+│   ├── display_server/
+│   ├── host_shim/
+│   ├── island_mode/
+│   └── micro_kernel/
+├── tests/                       # Cross-phase test specifications
+└── log/                         # Development session logs
 ```
+
+### Archive Directory
+
+`archive/` is **read-only historical storage**. Two kinds of content:
+
+1. **Brainstorming notes** (`core.md`, `architector.md`, etc.) — raw role-play discussions and early drafts that preceded the structured `layers/` documentation.
+2. **Code snapshots** (`demo/`, etc.) — disposable prototypes captured before refactoring. The active code lives in `src/`; the snapshot exists so lessons learned can be traced back to original implementations.
+
+> Never edit files in `archive/`. If you need to revive an idea, copy it out and evolve it in `src/` or `layers/`.
 
 ### Language Policy
 
@@ -54,6 +68,9 @@ os/
 ### Build Commands
 
 ```bash
+# Phase 0 Demo (Rust + wgpu + winit)
+cd src && cargo run --bin demo
+
 # Host Shim & Display Server (Rust)
 cd src/host_shim && cargo build
 cd src/display_server && cargo build
@@ -64,4 +81,61 @@ cd src/micro_kernel && bun install && bun run build
 # Run tests
 cargo test
 bun test
+
+# Linting (must pass on Windows AND Linux/WSL)
+cargo clippy -- -D warnings
 ```
+
+## Coding Standards
+
+### Architecture
+- **Single Responsibility:** One module — one concern. Rendering, input, business logic, and resource management must live in separate modules.
+- **No God Objects:** A struct must not accumulate unrelated state. If a struct has more than ~8 fields, split it into subsystems.
+- **Layered Design:** Keep host/shim, display server, and app logic isolated. The app must not directly touch wgpu command encoders.
+
+### Code Quality
+- **DRY:** Extract duplication immediately. Two similar blocks → one generic function or trait.
+- **Type Safety:** Prefer newtypes (`struct Pixel(u32)`, `struct Ndc(f32)`) over raw primitives when mixing coordinate spaces.
+- **Error Handling:** Use `Result` everywhere. `unwrap` / `expect` are allowed only for truly unrecoverable invariants (e.g., shader compilation at startup). Log errors with context before propagating.
+- **Function Size:** Keep functions under ~40 lines. Extract helper functions for readability.
+- **Module Size:** Keep modules under ~400 lines. Split by responsibility.
+- **No Inline Shaders:** WGSL/HLSL/GLSL live in separate `.wgsl` / `.hlsl` files, loaded at runtime or compiled with `include_str!`.
+- **Unsafe:** Requires a `// SAFETY:` comment explaining why the invariant holds and why it cannot be expressed in safe Rust.
+- **Constants:** No magic numbers. All colors, sizes, thresholds, and paths are named constants or config values.
+- **Documentation:** Every `pub` item needs a doc comment. Internal items need comments when the logic is non-obvious.
+
+### What Makes Code "Excellent"
+1. **A new teammate can read it without asking questions.** Self-documenting through names and structure.
+2. **Changing one feature does not touch unrelated files.** High cohesion, low coupling.
+3. **Tests exist for every non-trivial decision.** Unit tests for pure logic, integration tests for subsystems.
+4. **No warnings on `cargo clippy -- -D warnings`.** Zero tolerance for dead code, unused imports, or style violations.
+5. **Resource lifecycle is explicit.** GPU buffers, textures, and handles are created, updated, and destroyed in predictable places.
+6. **Performance is measured, not guessed.** Bottlenecks are identified with profiling before optimization.
+7. **The code is boring.** Clever tricks are avoided; straightforward, idiomatic Rust is preferred.
+
+## Multi-Platform Support
+
+### Verified Platforms
+- **Windows 11** (native): AMD Radeon 780M, Vulkan backend, wgpu 22.1
+- **WSL2 Ubuntu 24.04**: Mesa llvmpipe (CPU Vulkan), WSLg Wayland compositor
+
+### Cross-Platform Checklist
+- Use `#[cfg(target_os = "...")]` for OS-specific paths (fonts, system dirs)
+- Keep shader sources in `.wgsl` files loaded via `include_str!` — no platform differences
+- wgpu + winit handle windowing abstraction; no platform-specific window code needed
+- Run `cargo clippy -- -D warnings` on **both** Windows and Linux before committing
+
+## Known Issues
+
+### D3D12 Validation Warnings from OBS Studio Vulkan Layer
+
+On Windows systems with **OBS Studio** installed, its implicit Vulkan capture layer (`VK_LAYER_OBS_HOOK`) injects D3D12 command lists that trigger `INVALID_SUBRESOURCE_STATE` validation warnings in wgpu/Vulkan logs (especially on AMD GPUs).
+
+- **Not our bug** — this occurs inside OBS's internal D3D12 capture path.
+- **Impact:** Log noise only; does not affect stability or rendering correctness.
+- **Workaround:** Disable the OBS Vulkan capture layer for the current shell session:
+  ```bash
+  $env:DISABLE_VULKAN_OBS_CAPTURE=1
+  cargo run --bin demo
+  ```
+- **Permanent fix:** Uninstall OBS Studio or disable its Vulkan capture hook globally.

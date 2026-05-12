@@ -14,6 +14,7 @@
 | `investor.md` | Investor pitch role-play (internal exercise) |
 | `gazprom.md` | Industrial case study (Gazprom scenario) |
 | `gorynych.md` | Consortium scenario (Yandex / Sber / VK) |
+| `demo/` | Historical snapshot of Phase 0 prototype before refactoring |
 
 ---
 
