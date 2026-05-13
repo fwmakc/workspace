@@ -46,7 +46,13 @@ mod macos;
 #[cfg(target_os = "windows")]
 mod windows;
 
-#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+#[cfg(any(
+    target_os = "windows",
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "android",
+    target_os = "ios"
+))]
 mod winit_impl;
 
 pub mod mock;
