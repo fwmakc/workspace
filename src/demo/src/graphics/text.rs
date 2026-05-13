@@ -1,4 +1,11 @@
 //! Text renderer: fontdue rasterisation + single wgpu pipeline.
+//!
+//! Glyph atlases are cached by (text, font_size). The expensive rasterization
+//! and GPU texture upload only runs when text content changes. Vertex positions
+//! (which depend on screen position and color) are rebuilt every frame from
+//! cached glyph metrics — this is cheap arithmetic.
+
+use std::collections::HashMap;
 
 use tracing::warn;
 
@@ -26,30 +33,60 @@ pub struct TextEntry<'a> {
     pub color: [f32; 4],
 }
 
-/// GPU resources for one prepared text block.
-pub struct TextDrawCall {
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct AtlasKey {
+    text: String,
+    font_size_bits: u32,
+}
+
+impl AtlasKey {
+    fn new(text: &str, font_size: f32) -> Self {
+        Self {
+            text: text.to_owned(),
+            font_size_bits: font_size.to_bits(),
+        }
+    }
+}
+
+struct CachedAtlas {
     bind_group: wgpu::BindGroup,
     #[allow(dead_code)]
     texture: wgpu::Texture,
+    atlas_width: u32,
+    atlas_height: u32,
+    char_info: Vec<GlyphInfo>,
+    frame: u64,
+}
+
+struct GlyphInfo {
+    atlas_x: u32,
+    width: u32,
+    height: u32,
+    xmin: i32,
+    ymin: i32,
+    advance_width: f32,
+}
+
+struct PendingDrawCall {
+    key: AtlasKey,
     vertex_offset: u32,
     vertex_count: u32,
 }
 
-impl TextDrawCall {
-    pub fn render<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>, pipeline: &'a wgpu::RenderPipeline) {
-        pass.set_pipeline(pipeline);
-        pass.set_bind_group(0, &self.bind_group, &[]);
-        pass.draw(self.vertex_offset..self.vertex_offset + self.vertex_count, 0..1);
-    }
-}
-
 /// Renders strings via a dynamically-built R8Unorm glyph atlas.
+///
+/// Atlases are cached across frames. Call [`prepare()`](Self::prepare) to
+/// build vertex data, then [`upload()`](Self::upload) to send it to the GPU,
+/// and finally [`render()`](Self::render) inside a render pass.
 pub struct TextRenderer {
     font: fontdue::Font,
     pipeline: wgpu::RenderPipeline,
     bind_group_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     vertex_buffer: wgpu::Buffer,
+    cache: HashMap<AtlasKey, CachedAtlas>,
+    pending: Vec<PendingDrawCall>,
+    frame: u64,
 }
 
 impl TextRenderer {
@@ -161,6 +198,9 @@ impl TextRenderer {
             bind_group_layout,
             sampler,
             vertex_buffer,
+            cache: HashMap::new(),
+            pending: Vec::new(),
+            frame: 0,
         }
     }
 
@@ -199,58 +239,16 @@ impl TextRenderer {
             .expect("invalid font data")
     }
 
-    /// Prepare GPU resources for a slice of text entries.
-    ///
-    /// Returns draw calls and the total vertex count so the caller can upload the buffer.
-    pub fn prepare(
-        &self,
-        ctx: &GraphicsContext,
-        entries: &[TextEntry<'_>],
-        screen_to_ndc: impl Fn(f32, f32) -> [f32; 2],
-    ) -> (Vec<TextDrawCall>, Vec<TextVertex>) {
-        let mut all_vertices = Vec::new();
-        let mut draw_calls = Vec::new();
-
-        for entry in entries {
-            if entry.text.is_empty() {
-                continue;
-            }
-            let offset = all_vertices.len() as u32;
-            if let Some((verts, atlas_data, w, h)) =
-                self.layout_text(entry, &screen_to_ndc)
-            {
-                if all_vertices.len() + verts.len() > MAX_TEXT_VERTICES {
-                    warn!(
-                        "text vertex buffer full at {} vertices, dropping text entry",
-                        all_vertices.len()
-                    );
-                    continue;
-                }
-                let count = verts.len() as u32;
-                let (texture, bind_group) = self.upload_atlas(ctx, &atlas_data, w, h);
-                all_vertices.extend_from_slice(&verts);
-                draw_calls.push(TextDrawCall {
-                    bind_group,
-                    texture,
-                    vertex_offset: offset,
-                    vertex_count: count,
-                });
-            }
-        }
-
-        (draw_calls, all_vertices)
-    }
-
-    fn layout_text(
-        &self,
-        entry: &TextEntry<'_>,
-        screen_to_ndc: &impl Fn(f32, f32) -> [f32; 2],
-    ) -> Option<(Vec<TextVertex>, Vec<u8>, u32, u32)> {
+    fn rasterize_atlas(
+        font: &fontdue::Font,
+        text: &str,
+        font_size: f32,
+    ) -> (Vec<u8>, u32, u32, Vec<GlyphInfo>) {
         let mut pen_x = 0u32;
         let mut max_height = 0u32;
 
-        for c in entry.text.chars() {
-            let (metrics, _) = self.font.rasterize(c, entry.font_size);
+        for c in text.chars() {
+            let (metrics, _) = font.rasterize(c, font_size);
             pen_x += metrics.width as u32 + GLYPH_PADDING;
             max_height = max_height.max(metrics.height as u32);
         }
@@ -259,11 +257,11 @@ impl TextRenderer {
         let atlas_height = max_height.next_power_of_two().clamp(ATLAS_MIN_SIZE, ATLAS_MAX_SIZE);
 
         let mut atlas_data = vec![0u8; (atlas_width * atlas_height) as usize];
-        let mut char_info = Vec::new();
+        let mut char_info = Vec::with_capacity(text.len());
         pen_x = 0;
 
-        for c in entry.text.chars() {
-            let (metrics, bitmap) = self.font.rasterize(c, entry.font_size);
+        for c in text.chars() {
+            let (metrics, bitmap) = font.rasterize(c, font_size);
             let w = metrics.width as u32;
             let h = metrics.height as u32;
 
@@ -277,32 +275,47 @@ impl TextRenderer {
                 }
             }
 
-            char_info.push((pen_x, w, h, metrics));
+            char_info.push(GlyphInfo {
+                atlas_x: pen_x,
+                width: w,
+                height: h,
+                xmin: metrics.xmin,
+                ymin: metrics.ymin,
+                advance_width: metrics.advance_width,
+            });
             pen_x += w + GLYPH_PADDING;
         }
 
+        (atlas_data, atlas_width, atlas_height, char_info)
+    }
+
+    fn build_vertices(
+        cached: &CachedAtlas,
+        screen_x: f32,
+        screen_y_baseline: f32,
+        color: [f32; 4],
+        screen_to_ndc: &impl Fn(f32, f32) -> [f32; 2],
+    ) -> Vec<TextVertex> {
         let mut vertices = Vec::new();
-        let mut cursor_x = entry.screen_x;
+        let mut cursor_x = screen_x;
 
-        for (i, _c) in entry.text.chars().enumerate() {
-            let (atlas_x, w, h, metrics) = char_info[i];
-            let w_f = w as f32;
-            let h_f = h as f32;
+        for gi in &cached.char_info {
+            let w_f = gi.width as f32;
+            let h_f = gi.height as f32;
 
-            let left = cursor_x + metrics.xmin as f32;
+            let left = cursor_x + gi.xmin as f32;
             let right = left + w_f;
-            let top = entry.screen_y_baseline - (metrics.ymin as f32 + h_f);
-            let bottom = entry.screen_y_baseline - metrics.ymin as f32;
+            let top = screen_y_baseline - (gi.ymin as f32 + h_f);
+            let bottom = screen_y_baseline - gi.ymin as f32;
 
             let [ndc_left, ndc_top] = screen_to_ndc(left, top);
             let [ndc_right, ndc_bottom] = screen_to_ndc(right, bottom);
 
-            let uv_left = atlas_x as f32 / atlas_width as f32;
-            let uv_right = (atlas_x + w) as f32 / atlas_width as f32;
+            let uv_left = gi.atlas_x as f32 / cached.atlas_width as f32;
+            let uv_right = (gi.atlas_x + gi.width) as f32 / cached.atlas_width as f32;
             let uv_top = 0.0;
-            let uv_bottom = h_f / atlas_height as f32;
+            let uv_bottom = h_f / cached.atlas_height as f32;
 
-            let color = entry.color;
             let v = |px, py, u, v| TextVertex {
                 position: [px, py],
                 tex_coords: [u, v],
@@ -317,10 +330,10 @@ impl TextRenderer {
                 v(ndc_left, ndc_top, uv_left, uv_top),
             ]);
 
-            cursor_x += metrics.advance_width;
+            cursor_x += gi.advance_width;
         }
 
-        Some((vertices, atlas_data, atlas_width, atlas_height))
+        vertices
     }
 
     fn upload_atlas(
@@ -382,6 +395,79 @@ impl TextRenderer {
         (texture, bind_group)
     }
 
+    /// Prepare GPU resources for a slice of text entries.
+    ///
+    /// Cached atlases are reused when text content has not changed.
+    /// Returns vertex data to be uploaded via [`upload()`](Self::upload).
+    pub fn prepare(
+        &mut self,
+        ctx: &GraphicsContext,
+        entries: &[TextEntry<'_>],
+        screen_to_ndc: impl Fn(f32, f32) -> [f32; 2],
+    ) -> Vec<TextVertex> {
+        self.frame += 1;
+        let current_frame = self.frame;
+        self.pending.clear();
+
+        let mut all_vertices = Vec::new();
+
+        for entry in entries {
+            if entry.text.is_empty() {
+                continue;
+            }
+
+            let key = AtlasKey::new(entry.text, entry.font_size);
+
+            let needs_insert = !self.cache.contains_key(&key);
+            if needs_insert {
+                let (atlas_data, atlas_w, atlas_h, char_info) =
+                    Self::rasterize_atlas(&self.font, entry.text, entry.font_size);
+                let (texture, bind_group) =
+                    self.upload_atlas(ctx, &atlas_data, atlas_w, atlas_h);
+                self.cache.insert(key.clone(), CachedAtlas {
+                    texture,
+                    bind_group,
+                    atlas_width: atlas_w,
+                    atlas_height: atlas_h,
+                    char_info,
+                    frame: 0,
+                });
+            }
+
+            let cached = self.cache.get_mut(&key).expect("just inserted");
+            cached.frame = current_frame;
+
+            let offset = all_vertices.len() as u32;
+            let vertices = Self::build_vertices(
+                cached,
+                entry.screen_x,
+                entry.screen_y_baseline,
+                entry.color,
+                &screen_to_ndc,
+            );
+
+            if all_vertices.len() + vertices.len() > MAX_TEXT_VERTICES {
+                warn!(
+                    "text vertex buffer full at {} vertices, dropping text entry",
+                    all_vertices.len()
+                );
+                continue;
+            }
+
+            let count = vertices.len() as u32;
+            all_vertices.extend(vertices);
+            self.pending.push(PendingDrawCall {
+                key,
+                vertex_offset: offset,
+                vertex_count: count,
+            });
+        }
+
+        self.cache.retain(|_, v| v.frame == current_frame);
+
+        all_vertices
+    }
+
     /// Upload vertex data to the GPU text buffer.
     pub fn upload(&self, ctx: &GraphicsContext, vertices: &[TextVertex]) {
         if !vertices.is_empty() {
@@ -389,12 +475,20 @@ impl TextRenderer {
         }
     }
 
-    pub fn set_vertex_buffer<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>) {
+    /// Render all pending text draw calls into the given render pass.
+    ///
+    /// Must be called after [`prepare()`](Self::prepare) and [`upload()`](Self::upload).
+    pub fn render(&self, pass: &mut wgpu::RenderPass<'_>) {
+        if self.pending.is_empty() {
+            return;
+        }
+        pass.set_pipeline(&self.pipeline);
         pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-    }
-
-    pub fn pipeline(&self) -> &wgpu::RenderPipeline {
-        &self.pipeline
+        for call in &self.pending {
+            let cached = &self.cache[&call.key];
+            pass.set_bind_group(0, &cached.bind_group, &[]);
+            pass.draw(call.vertex_offset..call.vertex_offset + call.vertex_count, 0..1);
+        }
     }
 }
 
@@ -404,9 +498,9 @@ mod tests {
 
     #[test]
     fn text_vertex_size_matches_layout() {
-        let expected = std::mem::size_of::<[f32; 2]>()  // position
-            + std::mem::size_of::<[f32; 2]>()            // tex_coords
-            + std::mem::size_of::<[f32; 4]>();            // color
+        let expected = std::mem::size_of::<[f32; 2]>()
+            + std::mem::size_of::<[f32; 2]>()
+            + std::mem::size_of::<[f32; 4]>();
         assert_eq!(std::mem::size_of::<TextVertex>(), expected);
     }
 

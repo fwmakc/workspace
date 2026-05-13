@@ -130,7 +130,7 @@ impl DemoApp {
     fn build_and_render(&mut self) {
         let ctx = self.ctx.as_mut().expect("gpu not initialized");
         let shapes = self.shapes.as_mut().expect("gpu not initialized");
-        let text_renderer = self.text_renderer.as_ref().expect("gpu not initialized");
+        let text_renderer = self.text_renderer.as_mut().expect("gpu not initialized");
 
         shapes.clear();
         let (w, h) = ctx.window_size_f32();
@@ -140,10 +140,10 @@ impl DemoApp {
         shapes.upload(ctx);
 
         let text_entries = build_text_entries(&self.app, w, h);
-        let (text_draw_calls, text_vertices) = text_renderer.prepare(ctx, &text_entries, to_ndc);
+        let text_vertices = text_renderer.prepare(ctx, &text_entries, to_ndc);
         text_renderer.upload(ctx, &text_vertices);
 
-        render_frame(ctx, shapes, text_renderer, &text_draw_calls);
+        render_frame(ctx, shapes, text_renderer);
 
         ctx.request_redraw();
     }
@@ -270,7 +270,6 @@ fn render_frame(
     ctx: &mut GraphicsContext,
     shapes: &ShapeRenderer,
     text_renderer: &TextRenderer,
-    text_draw_calls: &[graphics::text::TextDrawCall],
 ) {
     let output = match ctx.acquire_frame() {
         Ok(f) => f,
@@ -306,11 +305,7 @@ fn render_frame(
         });
 
         shapes.render(&mut pass);
-
-        text_renderer.set_vertex_buffer(&mut pass);
-        for call in text_draw_calls {
-            call.render(&mut pass, text_renderer.pipeline());
-        }
+        text_renderer.render(&mut pass);
     }
 
     ctx.submit(std::iter::once(encoder.finish()));
