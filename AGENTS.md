@@ -102,10 +102,10 @@ rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-and
 cargo install cargo-ndk
 
 # Build host_shim for all Android targets
-cd src; cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -t x86 build -p w-host-shim
+cd src; cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -t x86 build -p w-host-shim --lib
 
 # Build single target
-cd src; cargo ndk -t arm64-v8a build -p w-host-shim
+cd src; cargo ndk -t arm64-v8a build -p w-host-shim --lib
 ```
 
 > **Note:** winit requires the `android-native-activity` feature for Android builds. This is configured in `host_shim/Cargo.toml` under `[target.'cfg(target_os = "android")'.dependencies]`.

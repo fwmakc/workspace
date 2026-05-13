@@ -75,7 +75,7 @@ jobs:
         working-directory: src
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-        run: cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -t x86 build -p w-host-shim
+        run: cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -t x86 build -p w-host-shim --lib
 
   test-report:
     name: Test Report & Coverage
