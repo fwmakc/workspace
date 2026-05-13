@@ -275,8 +275,8 @@ mod tests {
             let mut out = [0.0f32; 5];
             let read = rb.read(&mut out);
             assert_eq!(read, 5);
-            for i in 0..5 {
-                assert_eq!(out[i], round as f32 * 10.0 + i as f32);
+            for (i, val) in out.iter().take(5).enumerate() {
+                assert_eq!(*val, round as f32 * 10.0 + i as f32);
             }
         }
     }

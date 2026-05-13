@@ -34,7 +34,11 @@ mod tests {
 
     #[test]
     fn device_new() {
-        let dev = AudioDevice::new("Speakers", AudioDirection::Output, AudioDeviceId("speakers".into()));
+        let dev = AudioDevice::new(
+            "Speakers",
+            AudioDirection::Output,
+            AudioDeviceId("speakers".into()),
+        );
         assert_eq!(dev.name, "Speakers");
         assert_eq!(dev.direction, AudioDirection::Output);
         assert_eq!(dev.id, AudioDeviceId("speakers".into()));

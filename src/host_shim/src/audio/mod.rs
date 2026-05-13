@@ -146,10 +146,7 @@ impl CpalBackend {
             .map_err(|e| AudioError::StreamOpenFailed(e.to_string()))
     }
 
-    fn find_output_device(
-        &self,
-        device: Option<&AudioDevice>,
-    ) -> Result<cpal::Device, AudioError> {
+    fn find_output_device(&self, device: Option<&AudioDevice>) -> Result<cpal::Device, AudioError> {
         if device.is_none() {
             return self
                 .host
@@ -164,18 +161,11 @@ impl CpalBackend {
             .map_err(|e| AudioError::DeviceUnavailable(e.to_string()))?;
 
         cpal_devices
-            .find(|d| {
-                d.name()
-                    .map(|n| n == target_name)
-                    .unwrap_or(false)
-            })
+            .find(|d| d.name().map(|n| n == target_name).unwrap_or(false))
             .ok_or(AudioError::NoDeviceFound)
     }
 
-    fn find_input_device(
-        &self,
-        device: Option<&AudioDevice>,
-    ) -> Result<cpal::Device, AudioError> {
+    fn find_input_device(&self, device: Option<&AudioDevice>) -> Result<cpal::Device, AudioError> {
         if device.is_none() {
             return self
                 .host
@@ -190,11 +180,7 @@ impl CpalBackend {
             .map_err(|e| AudioError::DeviceUnavailable(e.to_string()))?;
 
         cpal_devices
-            .find(|d| {
-                d.name()
-                    .map(|n| n == target_name)
-                    .unwrap_or(false)
-            })
+            .find(|d| d.name().map(|n| n == target_name).unwrap_or(false))
             .ok_or(AudioError::NoDeviceFound)
     }
 }
@@ -206,8 +192,12 @@ mod tests {
     #[test]
     fn audio_error_display() {
         assert!(!AudioError::NoDeviceFound.to_string().is_empty());
-        assert!(AudioError::DeviceUnavailable("busy".into()).to_string().contains("busy"));
-        assert!(AudioError::StreamOpenFailed("oops".into()).to_string().contains("oops"));
+        assert!(AudioError::DeviceUnavailable("busy".into())
+            .to_string()
+            .contains("busy"));
+        assert!(AudioError::StreamOpenFailed("oops".into())
+            .to_string()
+            .contains("oops"));
     }
 
     #[test]
@@ -245,7 +235,9 @@ mod tests {
         let backend = CpalBackend::new().unwrap();
         let devices = backend.list_devices().unwrap();
         assert!(!devices.is_empty());
-        let has_output = devices.iter().any(|d| d.direction == AudioDirection::Output);
+        let has_output = devices
+            .iter()
+            .any(|d| d.direction == AudioDirection::Output);
         let has_input = devices.iter().any(|d| d.direction == AudioDirection::Input);
         assert!(has_output);
         assert!(has_input);

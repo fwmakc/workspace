@@ -25,10 +25,7 @@ pub struct AudioOutputStream {
 
 impl AudioOutputStream {
     /// Create a playback stream on the given cpal device.
-    pub(crate) fn new(
-        device: cpal::Device,
-        config: AudioConfig,
-    ) -> Result<Self, AudioStreamError> {
+    pub(crate) fn new(device: cpal::Device, config: AudioConfig) -> Result<Self, AudioStreamError> {
         let stream_config = build_stream_config(&device, &config, Direction::Output)?;
         let ring = Arc::new(RingBufferInner::new(config.ring_buffer_capacity()));
         let underrun_count = Arc::new(AtomicU64::new(0));
@@ -275,12 +272,16 @@ fn build_stream_config(
         Direction::Input => device
             .supported_input_configs()
             .map_err(|e| AudioStreamError::ConfigNotSupported(e.to_string()))?
-            .filter(|c| c.channels() == config.channels && c.sample_format() == cpal::SampleFormat::F32)
+            .filter(|c| {
+                c.channels() == config.channels && c.sample_format() == cpal::SampleFormat::F32
+            })
             .collect(),
         Direction::Output => device
             .supported_output_configs()
             .map_err(|e| AudioStreamError::ConfigNotSupported(e.to_string()))?
-            .filter(|c| c.channels() == config.channels && c.sample_format() == cpal::SampleFormat::F32)
+            .filter(|c| {
+                c.channels() == config.channels && c.sample_format() == cpal::SampleFormat::F32
+            })
             .collect(),
     };
 
@@ -293,9 +294,9 @@ fn build_stream_config(
     }
 
     let rate = cpal::SampleRate(config.sample_rate);
-    let exact = supported_configs.iter().find(|c| {
-        c.min_sample_rate().0 <= rate.0 && c.max_sample_rate().0 >= rate.0
-    });
+    let exact = supported_configs
+        .iter()
+        .find(|c| c.min_sample_rate().0 <= rate.0 && c.max_sample_rate().0 >= rate.0);
 
     if let Some(cfg) = exact {
         return Ok(cfg.with_sample_rate(rate).config());

@@ -61,16 +61,11 @@ impl Platform for IosPlatform {
     fn run(&mut self, event_handler: &mut dyn FnMut(HostEvent)) -> Result<(), HostError> {
         let config = self.pending_config.take().unwrap_or_default();
         let cursor_style = self.cursor_style;
-        winit_impl::run_winit_loop(
-            config,
-            cursor_style,
-            event_handler,
-            |key, state, _mods| {
-                if state != winit::event::ElementState::Pressed {
-                    return false;
-                }
-                key == KeyCode::Escape
-            },
-        )
+        winit_impl::run_winit_loop(config, cursor_style, event_handler, |key, state, _mods| {
+            if state != winit::event::ElementState::Pressed {
+                return false;
+            }
+            key == KeyCode::Escape
+        })
     }
 }
