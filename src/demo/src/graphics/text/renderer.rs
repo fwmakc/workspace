@@ -183,14 +183,39 @@ impl TextRenderer {
         ]
     }
 
+    /// Measure the pixel width of a text string at the given font size.
+    pub fn measure_text_width(&self, text: &str, font_size: f32) -> f32 {
+        let mut width = 0.0f32;
+        for c in text.chars() {
+            width += self.char_advance(c, font_size);
+        }
+        width
+    }
+
+    /// Get the horizontal advance width of a single character.
+    pub fn char_advance(&self, ch: char, font_size: f32) -> f32 {
+        let (metrics, _) = self.font.rasterize(ch, font_size);
+        metrics.advance_width
+    }
+
+    const FALLBACK_FONT: &[u8] = include_bytes!("../../assets/NotoSans-Regular.ttf");
+
     fn load_system_font() -> fontdue::Font {
-        let path = Self::system_font_candidates()
+        if let Some(path) = Self::system_font_candidates()
             .iter()
             .find(|p| std::path::Path::new(p).exists())
-            .expect("no suitable system font found");
-        let data = std::fs::read(path).expect("failed to read font file");
-        fontdue::Font::from_bytes(data, fontdue::FontSettings::default())
-            .expect("invalid font data")
+        {
+            if let Ok(data) = std::fs::read(path) {
+                if let Ok(font) = fontdue::Font::from_bytes(data, fontdue::FontSettings::default())
+                {
+                    return font;
+                }
+                warn!("system font at {} failed to parse, using fallback", path);
+            }
+        }
+        warn!("no system font found, using embedded Noto Sans fallback");
+        fontdue::Font::from_bytes(Self::FALLBACK_FONT, fontdue::FontSettings::default())
+            .expect("embedded font data is invalid")
     }
 
     fn upload_atlas(

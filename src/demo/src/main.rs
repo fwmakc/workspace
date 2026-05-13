@@ -13,6 +13,7 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 mod app;
 mod graphics;
 mod input;
+mod logging;
 
 use app::{
     AppState, CommandResult, CMD_FONT_SIZE, CMD_PANEL_COLOR, CMD_PANEL_HEIGHT, CURSOR_COLOR,
@@ -20,7 +21,7 @@ use app::{
 };
 
 use graphics::shape::{Shape, ShapeRenderer};
-use graphics::text::{TextEntry, TextRenderer};
+use graphics::text::{wrap_text, TextEntry, TextRenderer};
 use graphics::GraphicsContext;
 use input::{Command, InputHandler};
 
@@ -174,7 +175,7 @@ impl DemoApp {
         build_shapes(&mut gpu.shapes, &self.app, w, h, &to_ndc);
         gpu.shapes.upload(&gpu.ctx);
 
-        let text_entries = build_text_entries(&self.app, h);
+        let text_entries = build_text_entries(&self.app, &gpu.text_renderer, w, h);
         let text_vertices = gpu.text_renderer.prepare(&gpu.ctx, &text_entries, to_ndc);
         gpu.text_renderer.upload(&gpu.ctx, &text_vertices);
 
@@ -275,27 +276,52 @@ fn build_shapes(
     }
 }
 
-fn build_text_entries<'a>(app: &'a AppState, h: f32) -> Vec<TextEntry<'a>> {
+fn build_text_entries<'a>(
+    app: &'a AppState,
+    text_renderer: &TextRenderer,
+    w: f32,
+    h: f32,
+) -> Vec<TextEntry<'a>> {
     let mut entries = Vec::new();
 
     if !app.typed_text().is_empty() {
-        entries.push(TextEntry {
-            text: app.typed_text(),
-            font_size: FONT_SIZE,
-            screen_x: 20.0,
-            screen_y_baseline: 60.0,
-            color: TEXT_COLOR,
-        });
+        let line_height = FONT_SIZE * 1.2;
+        let lines = wrap_text(
+            text_renderer,
+            app.typed_text(),
+            FONT_SIZE,
+            w - 40.0,
+            line_height,
+        );
+        for (line, y_off) in lines {
+            entries.push(TextEntry {
+                text: line,
+                font_size: FONT_SIZE,
+                screen_x: 20.0,
+                screen_y_baseline: 60.0 + y_off,
+                color: TEXT_COLOR,
+            });
+        }
     }
 
     if app.help_visible {
-        entries.push(TextEntry {
-            text: HELP_TEXT,
-            font_size: CMD_FONT_SIZE,
-            screen_x: 20.0,
-            screen_y_baseline: h - CMD_PANEL_HEIGHT - 10.0,
-            color: [0.6, 0.8, 1.0, 1.0],
-        });
+        let line_height = CMD_FONT_SIZE * 1.2;
+        let lines = wrap_text(
+            text_renderer,
+            HELP_TEXT,
+            CMD_FONT_SIZE,
+            w - 40.0,
+            line_height,
+        );
+        for (line, y_off) in lines {
+            entries.push(TextEntry {
+                text: line,
+                font_size: CMD_FONT_SIZE,
+                screen_x: 20.0,
+                screen_y_baseline: h - CMD_PANEL_HEIGHT - 10.0 + y_off,
+                color: [0.6, 0.8, 1.0, 1.0],
+            });
+        }
     }
 
     if app.command_bar_visible && !app.command_text().is_empty() {
@@ -354,7 +380,7 @@ fn render_frame(ctx: &mut GraphicsContext, shapes: &ShapeRenderer, text_renderer
 }
 
 fn main() {
-    tracing_subscriber::fmt().with_env_filter("info").init();
+    logging::init_logging();
 
     info!("Workspace Phase 0 — Playable Demo starting...");
 
