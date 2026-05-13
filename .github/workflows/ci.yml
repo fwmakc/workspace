@@ -24,6 +24,10 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      - name: Ensure cargo in PATH (macOS)
+        if: runner.os == 'macOS'
+        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
