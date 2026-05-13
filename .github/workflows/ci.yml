@@ -63,7 +63,7 @@ jobs:
         run: cd tests/runners/workspace-test-runner && cargo build --release
 
       - name: Generate spec coverage report
-        run: ./tests/runners/workspace-test-runner/target/release/workspace-test-runner --workspace src --specs tests --json test-report.json
+        run: ./tests/runners/workspace-test-runner/target/release/w-test-runner --workspace src --specs tests --json test-report.json
         continue-on-error: true
 
       - name: Upload test report

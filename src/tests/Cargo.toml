@@ -8,8 +8,8 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
-workspace-host-shim = { path = "../host_shim" }
-workspace-display-server = { path = "../display_server" }
-workspace-micro-kernel = { path = "../micro_kernel" }
-workspace-island-mode = { path = "../island_mode" }
+w-host-shim = { path = "../host_shim" }
+w-display-server = { path = "../display_server" }
+w-micro-kernel = { path = "../micro_kernel" }
+w-island-mode = { path = "../island_mode" }
 serde_json = "1"

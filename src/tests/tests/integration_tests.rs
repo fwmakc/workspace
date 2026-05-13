@@ -3,17 +3,17 @@
 //! These tests verify coordination between Host Shim, Display Server,
 //! Micro-Kernel, and Island Mode layers.
 
-use workspace_display_server::renderer::Renderer;
-use workspace_display_server::surface::Surface;
-use workspace_host_shim::backend::{HostBackend, HostError};
-use workspace_host_shim::events::*;
-use workspace_host_shim::host_event::{HostEvent, WindowId};
-use workspace_host_shim::platform::mock::MockPlatform;
-use workspace_host_shim::platform::Platform;
-use workspace_host_shim::window::{Window, WindowConfig};
-use workspace_island_mode::webview::WebEngine;
-use workspace_micro_kernel::ipc::{IpcError, IpcMessage};
-use workspace_micro_kernel::security::{Capability, Rights};
+use w_display_server::renderer::Renderer;
+use w_display_server::surface::Surface;
+use w_host_shim::backend::{HostBackend, HostError};
+use w_host_shim::events::*;
+use w_host_shim::host_event::{HostEvent, WindowId};
+use w_host_shim::platform::mock::MockPlatform;
+use w_host_shim::platform::Platform;
+use w_host_shim::window::{Window, WindowConfig};
+use w_island_mode::webview::WebEngine;
+use w_micro_kernel::ipc::{IpcError, IpcMessage};
+use w_micro_kernel::security::{Capability, Rights};
 
 // ============================================================================
 // TC-01-001 ~ TC-01-004: Window + Surface coordination

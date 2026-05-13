@@ -1,5 +1,5 @@
 [package]
-name = "workspace-display-server"
+name = "w-display-server"
 description = "WebGPU-based display server and compositor"
 version.workspace = true
 authors.workspace = true
@@ -17,5 +17,5 @@ serde = { workspace = true }
 pollster = "0.3"
 
 [lib]
-name = "workspace_display_server"
+name = "w_display_server"
 path = "src/lib.rs"

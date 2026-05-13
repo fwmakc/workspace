@@ -1,5 +1,5 @@
 [package]
-name = "workspace-demo"
+name = "w-demo"
 version.workspace = true
 authors.workspace = true
 license.workspace = true

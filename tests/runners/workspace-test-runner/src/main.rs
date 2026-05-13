@@ -4,7 +4,7 @@
 //! `cargo test` results and produces a JSON coverage report.
 //!
 //! Usage:
-//!   workspace-test-runner [--workspace <path>] [--json <file>]
+//!   w-test-runner [--workspace <path>] [--json <file>]
 
 use regex::Regex;
 use serde::Serialize;

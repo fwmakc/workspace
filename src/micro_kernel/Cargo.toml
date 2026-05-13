@@ -1,5 +1,5 @@
 [package]
-name = "workspace-micro-kernel"
+name = "w-micro-kernel"
 description = "Core runtime: IPC, security, VFS, and CRDT engine bindings"
 version.workspace = true
 authors.workspace = true
@@ -18,5 +18,5 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 proptest = "1"
 
 [lib]
-name = "workspace_micro_kernel"
+name = "w_micro_kernel"
 path = "src/lib.rs"
