@@ -8,10 +8,13 @@ use winit::application::ApplicationHandler;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::WindowAttributes;
 
+type AssertFn = Box<dyn FnOnce(&winit::window::Window) + Send>;
+type SharedAssert = Arc<Mutex<Option<AssertFn>>>;
+
 struct WindowCollector {
     window: Option<winit::window::Window>,
     attrs: WindowAttributes,
-    assertions: Arc<Mutex<Option<Box<dyn FnOnce(&winit::window::Window) + Send>>>>,
+    assertions: SharedAssert,
     asserted: bool,
 }
 
@@ -54,8 +57,7 @@ fn run_with_window(
     assertions: Box<dyn FnOnce(&winit::window::Window) + Send>,
 ) {
     let event_loop = EventLoop::new().expect("event loop creation failed");
-    let assertions: Arc<Mutex<Option<Box<dyn FnOnce(&winit::window::Window) + Send>>>> =
-        Arc::new(Mutex::new(Some(assertions)));
+    let assertions: SharedAssert = Arc::new(Mutex::new(Some(assertions)));
 
     let mut collector = WindowCollector {
         window: None,
